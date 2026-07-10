@@ -1,0 +1,153 @@
+{
+  "metadata": {
+    "titulo": "Base de conhecimento local - Reforma Tributária (IBS/CBS) aplicada a ERP",
+    "descricao": "Arquivo de contexto local consultado pelo ReformaTax Agent. Cobre três cenários: cadastro de produtos, emissão de nota fiscal e cálculo de IBS/CBS.",
+    "versao": "1.0",
+    "data_atualizacao": "2026-07-08",
+    "fundamentos_legais": [
+      "Emenda Constitucional 132/2023",
+      "Lei Complementar 214/2025",
+      "Decreto 12.955/2026 (Regulamento da CBS)",
+      "Notas Técnicas NF-e/NFC-e (RT 2024.002 e sucessoras) - Portal Nacional da NF-e"
+    ],
+    "aviso_legal": "Este arquivo tem caráter informativo e técnico, não substitui parecer jurídico, fiscal ou contábil definitivo. Sempre validar com a área fiscal/contábil da empresa.",
+    "cronograma_geral": [
+      {"periodo": "2026", "descricao": "Ano-teste: CBS a 0,9% e IBS a 0,1%, caráter informativo, sem cobrança efetiva se as obrigações acessórias forem cumpridas."},
+      {"periodo": "01/01/2026", "descricao": "Início da obrigatoriedade de aplicar as novas regras de validação de IBS/CBS nos documentos fiscais eletrônicos."},
+      {"periodo": "01/08/2026", "descricao": "Passa a ser obrigatório o destaque de IBS e CBS nos principais documentos fiscais eletrônicos (NF-e, NFC-e, etc.)."},
+      {"periodo": "2027", "descricao": "CBS substitui integralmente PIS e COFINS; início efetivo da cobrança; início do split payment e IPI reduzido a zero (exceto Zona Franca de Manaus)."},
+      {"periodo": "2027 a 2027-2033", "descricao": "IBS entra em transição substituindo gradualmente ICMS e ISS até consolidação total em 2033."},
+      {"periodo": "2029-2033", "descricao": "Transição plena do IBS, extinção definitiva de ICMS e ISS."}
+    ],
+    "glossario": {
+      "IBS": "Imposto sobre Bens e Serviços - tributo de competência compartilhada entre estados e municípios, substitui ICMS e ISS.",
+      "CBS": "Contribuição sobre Bens e Serviços - tributo federal, substitui PIS e COFINS.",
+      "IS": "Imposto Seletivo - incide sobre produtos específicos como bebidas alcoólicas e cigarros.",
+      "cClassTrib": "Código de Classificação Tributária do IBS e da CBS - detalha o tratamento tributário de cada operação/produto, derivado do CST e do NCM.",
+      "CST": "Código de Situação Tributária (do IBS/CBS) - classifica a natureza da tributação da operação (ex.: tributação integral, redução, isenção, não incidência).",
+      "NCM": "Nomenclatura Comum do Mercosul - código de 8 dígitos que classifica a mercadoria; base para determinar alíquotas, reduções e cClassTrib.",
+      "NBS": "Nomenclatura Brasileira de Serviços - equivalente ao NCM para serviços.",
+      "Split Payment": "Mecanismo de recolhimento automático do IBS/CBS no momento da liquidação financeira do pagamento; o valor do tributo é segregado e enviado diretamente ao Fisco.",
+      "Tributação por fora": "Modelo em que o tributo não integra a própria base de cálculo, diferente do sistema antigo de 'imposto por dentro'.",
+      "Não cumulatividade plena": "Todo valor de IBS/CBS destacado em documento fiscal regular gera crédito ao adquirente, desde que usado em atividade tributada.",
+      "Valor agregado": "Base prática de incidência do IBS/CBS: valor de venda menos valor de compra em cada etapa da cadeia."
+    }
+  },
+  "cenarios": {
+    "cadastro_produtos": {
+      "nome": "Cadastro de produtos",
+      "resumo": "A revisão de cadastros é considerada a etapa mais sensível da transição, pois todo o cálculo e a emissão de documentos fiscais dependem da qualidade da parametrização do produto.",
+      "pontos_reforma_relacionados": [
+        "O NCM continua obrigatório e ganha função estratégica: passa a ajudar a identificar a incidência de IBS, CBS e Imposto Seletivo.",
+        "O cClassTrib substitui a lógica antiga de CST/CFOP e precisa ser atribuído a cada produto/serviço com base em análise contextual (NCM + natureza da operação + anexos da LC 214/2025), não apenas por 'de-para' automático.",
+        "Existem anexos da LC 214/2025 com reduções e isenções específicas (ex.: cesta básica com alíquota zero, dispositivos de acessibilidade, medicamentos, educação, transporte público, saúde).",
+        "O mesmo NCM pode ter tratamentos tributários diferentes conforme a finalidade/descrição do produto (ex.: fraldas de bebê vs. outros itens do mesmo NCM), exigindo leitura conjunta de NCM e características do item.",
+        "Não é possível criar uma tabela simples 'NCM -> cClassTrib'; a classificação depende de leitura contextual de cada operação."
+      ],
+      "impactos_tecnicos_erp": [
+        "Necessidade de revisar e atualizar o campo NCM de todos os produtos cadastrados com base nas tabelas mais recentes.",
+        "Criação/adequação de campo(s) para armazenar o cClassTrib e o CST do IBS/CBS por produto (ou por combinação produto + operação).",
+        "Cadastro de regras de exceção por produto (redução de alíquota, isenção, alíquota zero) vinculadas aos anexos da LC 214/2025.",
+        "Revisão de unidade de medida, origem, tipo de item (matéria-prima, produto intermediário, produto acabado) e classificações fiscais associadas.",
+        "Necessidade de rotina de reclassificação em massa para empresas com muitos SKUs, o que pode envolver dezenas de milhares de itens em prazo curto.",
+        "Cadastro de descrição legal/finalidade do produto quando o benefício fiscal depender disso (ex.: 'destinado ao consumo humano', 'sem adição de açúcar')."
+      ],
+      "pontos_atencao": [
+        "Um cadastro de produto desalinhado contamina automaticamente o documento fiscal, o cálculo de impostos e a apuração, pois todo o processo nasce da parametrização do item.",
+        "Repetir códigos de classificação por hábito (prática comum no ICMS/PIS/COFINS) é incompatível com a lógica do novo modelo (IVA Dual); cada operação exige leitura própria.",
+        "Erro de NCM não é mero erro cadastral: pode distorcer IPI, ICMS, PIS/COFINS, imposto de importação, SPED e agora também CBS/IBS.",
+        "Validar com a área fiscal/contábil quais produtos se enquadram em reduções, isenções ou alíquota zero antes de aplicar classificação em massa.",
+        "Ferramentas que tratam a alíquota como valor fixo tendem a produzir diagnóstico raso, pois a carga tributária depende de escolhas (fornecedores, mix de produtos, enquadramentos)."
+      ],
+      "checklist_tecnico": [
+        "Revisar o NCM de todos os produtos cadastrados com base na tabela vigente.",
+        "Mapear e atribuir o cClassTrib e o CST do IBS/CBS a cada produto/operação.",
+        "Identificar produtos elegíveis a reduções, isenções ou alíquota zero conforme os anexos da LC 214/2025.",
+        "Cadastrar campos de descrição/finalidade do produto quando o benefício depender desse critério.",
+        "Validar cadastros críticos (matéria-prima, produto intermediário, produto acabado, produtos sob encomenda).",
+        "Testar simulação de emissão de nota para os produtos mais representativos do catálogo em ambiente de homologação.",
+        "Documentar a régua de decisão usada para classificar cada família de produtos, para auditoria futura."
+      ]
+    },
+    "emissao_nota_fiscal": {
+      "nome": "Emissão de nota fiscal",
+      "resumo": "O leiaute da NF-e/NFC-e foi adaptado para incluir os campos de IBS, CBS e Imposto Seletivo, com validação em tempo real cada vez mais rígida conforme o cronograma avança.",
+      "pontos_reforma_relacionados": [
+        "As Notas Técnicas do Portal Nacional da NF-e (a partir da RT 2024.002 e sucessoras) criam novos eventos e alteram o leiaute da NF-e/NFC-e, inserindo grupos e campos relativos a IBS, CBS e IS.",
+        "Em 2026, os campos de IBS/CBS/IS ainda podem ser opcionais em parte do período, mas a partir de janeiro de 2026 as novas regras de validação passam a ser aplicadas quando esses campos forem preenchidos.",
+        "A partir de 1º de agosto de 2026 torna-se obrigatório o destaque de IBS e CBS, individualizados por operação, nos principais documentos fiscais eletrônicos.",
+        "O CFOP perde parte de sua função estrutural; a classificação das operações passa a seguir tabelas nacionais do Comitê Gestor, ligadas ao cClassTrib.",
+        "Existe um grupo específico no leiaute (grupo de totais da NF-e) dedicado a consolidar os valores totais de IBS, CBS e Imposto Seletivo no documento.",
+        "Divergência entre os valores lançados por item e os valores totalizadores do documento pode causar rejeição da nota.",
+        "2026 é tratado como ano-teste: o contribuinte que emitir os documentos seguindo as normas vigentes fica dispensado do recolhimento efetivo de IBS/CBS, mesmo com os campos preenchidos."
+      ],
+      "impactos_tecnicos_erp": [
+        "Atualização do módulo emissor de NF-e/NFC-e para contemplar os novos grupos e campos de IBS, CBS e Imposto Seletivo no XML.",
+        "Ajuste da lógica de geração do documento para refletir corretamente o cClassTrib e o CST de cada item, herdados do cadastro de produto.",
+        "Inclusão de rotina de consistência entre os valores calculados por item e os totalizadores do documento antes da transmissão.",
+        "Acompanhamento contínuo das versões mais recentes das Notas Técnicas, pois leiautes e regras de validação podem ser ajustados ao longo da implantação.",
+        "Ambiente de homologação deve ser usado para simular as operações mais relevantes da empresa antes de cada marco de obrigatoriedade.",
+        "Necessidade de tratar eventos adicionais previstos pela reforma, como notas de crédito e notas de débito para lançamentos de ajuste do IBS/CBS."
+      ],
+      "pontos_atencao": [
+        "Erros que antes passavam despercebidos no cadastro tendem a se materializar na emissão, já que a validação passa a operar em tempo real (Receita Federal para CBS, Comitê Gestor para IBS).",
+        "Um cadastro de produto ou parametrização tributária incorreta pode gerar XML com inconsistências e provocar rejeição da nota pelo ambiente autorizador.",
+        "A obrigatoriedade para o Simples Nacional segue cronograma próprio, com início em 2027 e regras específicas de transição.",
+        "Empresas com processos fiscais bem estruturados e ERP atualizado tendem a lidar melhor com a transição do que empresas com controles manuais ou sistemas desatualizados.",
+        "É recomendável acompanhar de perto as áreas fiscal, contábil e de TI em conjunto, já que a adequação da NF-e depende de mudanças em múltiplas frentes, não apenas técnicas."
+      ],
+      "checklist_tecnico": [
+        "Confirmar que o sistema emissor está atualizado conforme a versão mais recente da Nota Técnica de IBS/CBS/IS.",
+        "Validar o preenchimento correto dos grupos/campos de IBS, CBS e Imposto Seletivo por item da nota.",
+        "Conferir a coerência entre os valores por item e os totalizadores do documento (grupo de totais).",
+        "Testar emissão das operações mais frequentes (venda, devolução, transferência, remessa) em ambiente de homologação.",
+        "Verificar tratamento de eventos de ajuste (notas de crédito/débito) relacionados ao IBS/CBS.",
+        "Confirmar cronograma de obrigatoriedade aplicável ao regime tributário da empresa (regular vs. Simples Nacional).",
+        "Registrar rejeições identificadas em teste e mapear a causa (cadastro, parametrização ou leiaute) antes de ir para produção."
+      ]
+    },
+    "calculo_impostos": {
+      "nome": "Cálculo de impostos (IBS e CBS)",
+      "resumo": "O cálculo de IBS/CBS segue lógica de IVA Dual, com tributação 'por fora', não cumulatividade plena e, futuramente, recolhimento via split payment.",
+      "pontos_reforma_relacionados": [
+        "A base de cálculo do IBS/CBS é o valor da operação (preço cobrado), conforme o art. 12 da LC 214/2025; o próprio IBS e a própria CBS não integram sua própria base (tributação 'por fora').",
+        "Durante a transição, ICMS, ISS, PIS e COFINS ainda podem compor a base de cálculo em determinadas situações, conforme regras específicas do período de convivência dos sistemas.",
+        "O cálculo segue o princípio da não cumulatividade plena: o valor de IBS/CBS destacado em documento fiscal regular gera crédito ao adquirente, desde que o bem/serviço seja usado em atividade tributada.",
+        "Na prática, a alíquota incide sobre o valor agregado em cada etapa da cadeia (valor de venda menos valor de compra), evitando efeito cascata.",
+        "O IBS segue o princípio do destino: a tributação é consolidada no local de consumo, não no local de origem, alterando a lógica de apuração por estabelecimento.",
+        "Em 2026 (ano-teste), as alíquotas são reduzidas: CBS em 0,9% e IBS em 0,1%, sem efeito financeiro de cobrança, desde que as obrigações acessórias sejam cumpridas.",
+        "A alíquota de referência combinada estimada pelo Ministério da Fazenda para o modelo pleno é de aproximadamente 26,5%.",
+        "O split payment é o mecanismo que, a partir de 2027, passa a separar automaticamente o valor do tributo no momento da liquidação financeira do pagamento, repassando-o diretamente ao Fisco.",
+        "Inicialmente o split payment deve se concentrar em meios de pagamento mais simples e rastreáveis (Pix, boleto, transferência eletrônica); cartões de crédito/débito e vouchers entram em etapa posterior.",
+        "Empresas com maior geração de créditos (ex.: indústria) tendem a ser menos impactadas na carga efetiva do que setores com menor volume de crédito, como serviços."
+      ],
+      "impactos_tecnicos_erp": [
+        "Revisão da engine de cálculo de impostos para aplicar a lógica de tributação 'por fora' (tributo não compõe a própria base).",
+        "Implementação/ajuste do cálculo de crédito e débito de IBS/CBS por operação, respeitando a não cumulatividade plena.",
+        "Adequação da lógica de apuração para considerar o princípio do destino (local de consumo) em vez do local de origem, especialmente em operações interestaduais/intermunicipais.",
+        "Criação de parametrização para conviver, durante a transição, com o cálculo simultâneo dos tributos antigos (ICMS, ISS, PIS, COFINS) e dos novos (IBS, CBS).",
+        "Preparação do sistema financeiro/contábil para o split payment: segregação automática dos valores de tributo no momento da liquidação, quando aplicável.",
+        "Ajuste do plano de contas para segregar créditos por tipo (IBS estadual, IBS municipal, CBS federal) e criar contas transitórias durante o período de convivência entre sistemas.",
+        "Revisão de mark-up e formação de preço, já que a mudança de tributo 'por dentro' para 'por fora' altera a composição do preço final."
+      ],
+      "pontos_atencao": [
+        "Em 2026, mesmo sendo ano de teste com caráter informativo, os erros de classificação/cálculo cometidos agora tendem a se propagar como erro estrutural quando a cobrança efetiva começar em 2027.",
+        "A discussão sobre se o IBS/CBS compõe a base de cálculo do ICMS/ISS durante a transição ainda gera controvérsia jurídica e pode variar conforme orientação estadual/municipal; recomenda-se acompanhar posicionamentos oficiais.",
+        "O split payment não altera quem é o contribuinte responsável pelo tributo; o fornecedor continua sendo o responsável legal, mesmo com o repasse automático ao Fisco.",
+        "Setores de serviços, que geram menos créditos na cadeia, tendem a sentir maior impacto na carga tributária efetiva do que setores industriais.",
+        "Toda simulação de carga tributária e formação de preço deve ser validada com a área fiscal/contábil, pois envolve decisões de precificação e compliance.",
+        "O tema é objeto de regulamentação em evolução (ex.: Decreto 12.955/2026); recomenda-se verificar sempre a versão mais recente da norma antes de decisões estruturais no sistema."
+      ],
+      "checklist_tecnico": [
+        "Confirmar que a engine de cálculo aplica a tributação 'por fora' para IBS/CBS.",
+        "Validar o cálculo de créditos e débitos de IBS/CBS por operação (não cumulatividade plena).",
+        "Testar cenários de operações interestaduais/intermunicipais considerando o princípio do destino.",
+        "Simular a convivência entre tributos antigos e novos durante o período de transição.",
+        "Mapear o impacto do split payment no fluxo de caixa e na conciliação bancária, quando aplicável ao meio de pagamento.",
+        "Revisar o plano de contas contábil para refletir a nova segregação de tributos e créditos.",
+        "Simular o impacto na formação de preço/mark-up considerando a mudança de tributação 'por dentro' para 'por fora'.",
+        "Acompanhar atualizações regulatórias (ex.: novos decretos e notas técnicas) que possam alterar regras de cálculo."
+      ]
+    }
+  }
+}

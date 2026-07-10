@@ -1,0 +1,12 @@
+# Dependências iniciais do ReformaTax Agent.
+# As versões abaixo ainda não foram fixadas (==) — isso deve ser feito assim
+# que o ambiente for testado pela primeira vez (pip freeze > requirements.txt).
+
+langgraph
+langchain
+langchain-core
+langchain-anthropic
+python-dotenv
+fastapi
+uvicorn
+pydantic
