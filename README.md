@@ -69,6 +69,11 @@ reformatax/
    cp .env.example .env
    ```
 
+4. Obtenha uma API key do Gemini no [Google AI Studio](https://aistudio.google.com/app/apikey)
+   e preencha a variável `GOOGLE_API_KEY` no arquivo `.env` local (nunca no
+   `.env.example`, que é versionado). A variável `GEMINI_MODEL` já vem
+   preenchida com o modelo padrão do projeto (`gemini-3-flash`).
+
 ## Próximos passos
 
 - Implementação do grafo do agente com LangGraph (`app/agent`).

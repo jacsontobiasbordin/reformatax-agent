@@ -5,8 +5,10 @@
 langgraph
 langchain
 langchain-core
-langchain-anthropic
+langchain-google-genai
+google-generativeai
 python-dotenv
 fastapi
 uvicorn
 pydantic
+pydantic-settings
