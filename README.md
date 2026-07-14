@@ -99,11 +99,28 @@ O provedor padrão e recomendado para este mini-projeto é `gemini`, com o
 modelo `gemini-3-flash`, pelo custo-benefício. Os demais provedores existem
 para portabilidade entre ambientes, não como substituição da entrega.
 
+## Ferramenta: consulta à base local
+
+O módulo `app/tools/local_kb.py` lê e consulta o arquivo
+`data/reforma_tributaria_erp.json`, que contém os três cenários de impacto
+da Reforma Tributária em sistemas ERP: `cadastro_produtos`,
+`emissao_nota_fiscal` e `calculo_impostos`. É uma ferramenta puramente
+determinística — não faz nenhuma chamada a LLM — e será usada pelo nó
+`consultar_base_local` do grafo do agente, implementado em um prompt
+futuro.
+
+Exemplo mínimo de uso:
+
+```python
+from app.tools.local_kb import consultar_cenario
+
+dados = consultar_cenario("cadastro_produtos")
+```
+
 ## Próximos passos
 
 - Implementação do grafo do agente com LangGraph (`app/agent`).
-- Implementação da ferramenta de consulta à base local (`app/tools`).
 - Implementação da interface web (`app/web`).
-- Escrita dos testes automatizados (`tests`).
+- Ampliação dos testes automatizados (`tests`).
 
 Essas etapas serão realizadas em prompts futuros.
