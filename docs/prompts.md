@@ -550,3 +550,139 @@ real a um modelo nesta etapa — isso continua para os próximos prompts, que
 a partir de agora devem sempre usar app.llm.factory.get_llm() em vez de
 instanciar um provedor diretamente.
 ```
+
+## Prompt 5 — 2026-07-14
+
+**Resultado:** Branch `feature/ferramenta-consulta-base-local` criada a
+partir de `develop`; `app/tools/local_kb.py` implementado com
+`carregar_base()` (leitura cacheada, caminho fixo resolvido a partir da
+raiz do projeto, sem aceitar caminho externo), `consultar_cenario()`,
+`listar_cenarios_disponiveis()` e as exceções `CenarioNaoEncontradoError` e
+`BaseLocalIndisponivelError`; `tests/test_local_kb.py` criado cobrindo os
+três cenários válidos, cenário inválido, arquivo ausente e listagem de
+cenários (6 testes, todos passando); README atualizado com a seção
+"Ferramenta: consulta à base local". Primeira lógica Python funcional do
+projeto, 100% determinística — nenhuma chamada a LLM nem grafo do LangGraph
+implementados nesta etapa.
+
+**Prompt integral:**
+
+```
+Vamos implementar a ferramenta integrada do agente: a leitura e consulta ao
+arquivo local data/reforma_tributaria_erp.json (base de conhecimento dos
+três cenários: cadastro_produtos, emissao_nota_fiscal, calculo_impostos).
+Esta ferramenta é usada pelo nó "consultar_base_local" do grafo LangGraph,
+que será implementado em um prompt futuro — aqui você só cria a função em
+si, testável de forma isolada, sem grafo e sem LLM envolvidos.
+
+NÃO implemente o grafo do LangGraph, os nós do agente nem nenhuma chamada a
+get_llm(). Esta etapa é puramente sobre leitura de arquivo e validação.
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b feature/ferramenta-consulta-base-local
+
+Execute as etapas abaixo, nesta ordem:
+
+1. IMPLEMENTAR A FERRAMENTA (app/tools/local_kb.py)
+   Crie o módulo com:
+   - Uma constante `CENARIOS_VALIDOS` com os três cenários suportados:
+     "cadastro_produtos", "emissao_nota_fiscal", "calculo_impostos"
+     (devem bater exatamente com as chaves usadas em
+     data/reforma_tributaria_erp.json).
+   - Uma exceção customizada `CenarioNaoEncontradoError(Exception)` para
+     quando o cenário pedido não existir na base.
+   - Uma exceção customizada `BaseLocalIndisponivelError(Exception)` para
+     falhas de leitura do arquivo (arquivo ausente, JSON inválido).
+   - Uma função `carregar_base() -> dict` que:
+     - Resolve o caminho do arquivo de forma fixa, relativa à raiz do
+       projeto (ex.: usando `pathlib.Path(__file__).resolve().parents[2]
+       / "data" / "reforma_tributaria_erp.json"`), nunca aceitando um
+       caminho vindo de fora da função — reforçando a validação do escopo
+       de "evitar leitura de arquivos fora da pasta definida";
+     - Usa `functools.lru_cache` (ou cache manual simples) para não reler o
+       arquivo do disco a cada chamada;
+     - Lança `BaseLocalIndisponivelError` com mensagem clara se o arquivo
+       não existir ou se o JSON estiver malformado (capture a exceção
+       original de `json.JSONDecodeError`/`FileNotFoundError` e relance
+       como a exceção customizada, preservando a causa com `raise ... from
+       e`).
+   - Uma função `consultar_cenario(cenario: str) -> dict` que:
+     - Valida se `cenario` está em `CENARIOS_VALIDOS`; se não estiver,
+       lança `CenarioNaoEncontradoError` com mensagem informando os
+       cenários válidos;
+     - Chama `carregar_base()` e retorna o sub-dicionário correspondente a
+       `cenarios.<cenario>` do JSON (resumo, pontos_reforma_relacionados,
+       impactos_tecnicos_erp, pontos_atencao, checklist_tecnico);
+     - Lança `CenarioNaoEncontradoError` também se, por algum motivo, a
+       chave não existir dentro do JSON carregado (defesa extra, mesmo já
+       validando contra `CENARIOS_VALIDOS`).
+   - Uma função `listar_cenarios_disponiveis() -> list[str]` que apenas
+     retorna `CENARIOS_VALIDOS` como lista — útil depois para popular os
+     botões rápidos da interface web.
+   - Docstrings curtas em cada função explicando o propósito.
+
+2. ESCREVER TESTES UNITÁRIOS (tests/test_local_kb.py)
+   Usando `pytest`, cubra pelo menos:
+   - `consultar_cenario` retorna um dicionário com as chaves esperadas
+     (`resumo`, `pontos_reforma_relacionados`, `impactos_tecnicos_erp`,
+     `pontos_atencao`, `checklist_tecnico`) para cada um dos três cenários
+     válidos;
+   - `consultar_cenario` com um cenário inválido (ex.: "cenario_invalido")
+     lança `CenarioNaoEncontradoError`;
+   - `carregar_base` lança `BaseLocalIndisponivelError` quando o arquivo não
+     existe (simule apontando para um caminho inexistente via monkeypatch,
+     sem alterar a função para aceitar caminho externo — teste a função
+     como uma unidade isolada, mockando `Path` ou o caminho interno);
+   - `listar_cenarios_disponiveis` retorna exatamente os três cenários
+     esperados.
+   Rode `pytest tests/test_local_kb.py -v` e confirme que todos os testes
+   passam.
+
+3. ATUALIZAR O README.md
+   Adicione uma seção curta "Ferramenta: consulta à base local" explicando
+   o que `app/tools/local_kb.py` faz, os cenários suportados e um exemplo
+   mínimo de uso:
+
+     from app.tools.local_kb import consultar_cenario
+     dados = consultar_cenario("cadastro_produtos")
+
+   Não descreva o grafo do LangGraph nem a geração de resposta com LLM
+   aqui — isso ainda não existe no projeto.
+
+4. VALIDAÇÃO LOCAL
+   - Rode `pytest tests/ -v` e confirme que todos os testes passam.
+   - Rode manualmente:
+     python -c "from app.tools.local_kb import consultar_cenario; import json; print(json.dumps(consultar_cenario('calculo_impostos'), indent=2, ensure_ascii=False))"
+     e confirme que a saída bate com o conteúdo de
+     data/reforma_tributaria_erp.json.
+
+5. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. feat: adiciona ferramenta de consulta à base local de conhecimento
+   2. test: adiciona testes unitários para a ferramenta de consulta local
+   3. docs: documenta o uso da ferramenta de consulta local no README
+
+6. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin feature/ferramenta-consulta-base-local
+
+   Abra o PR direcionado para develop:
+     Título: "feat: ferramenta de consulta à base local de conhecimento"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - Nenhum nó do LangGraph foi criado
+       - Nenhuma chamada a get_llm() ou a qualquer provedor de LLM foi feita
+       - A interface web ainda não consome esta ferramenta
+
+7. VALIDAÇÃO FINAL
+   Mostre a saída de `pytest tests/ -v`, `git log --oneline --graph` e
+   `git status`, confirmando que:
+   - Todos os testes passam;
+   - Nenhum caminho de arquivo externo à pasta `data/` pode ser lido pela
+     ferramenta (a função não aceita caminho como parâmetro vindo de fora);
+   - Os commits seguem o padrão semântico do projeto, todos com prefixo
+     coerente com uma feature (`feat`, `test`, `docs`).
+
+Não implemente o grafo do LangGraph, os nós do agente, nem qualquer chamada
+a get_llm() nesta etapa — isso começa no Prompt 06.
+```
