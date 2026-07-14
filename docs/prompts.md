@@ -391,3 +391,162 @@ Execute as etapas abaixo, nesta ordem:
 Não implemente o grafo do LangGraph, os nós do agente ou qualquer chamada
 ao modelo gemini-3-flash nesta etapa.
 ```
+
+## Prompt 4 — 2026-07-14
+
+**Resultado:** Branch `chore/multi-llm-provider` criada a partir de
+`develop`; `requirements.txt` atualizado com `langchain-anthropic` e
+`langchain-openai`, mantendo `langchain-google-genai`; `.env.example`
+reestruturado com o seletor `LLM_PROVIDER` (gemini | anthropic | openai) e
+uma seção de variáveis por provedor; `app/config.py` refatorado com o campo
+`llm_provider`, campos opcionais por provedor e um validador que exige a
+API key do provedor ativo; pacote `app/llm/` criado com `factory.py`
+implementando `get_llm()`, único ponto do projeto que importa
+`ChatGoogleGenerativeAI`, `ChatAnthropic` ou `ChatOpenAI`; README atualizado
+com a seção "Provedores de LLM suportados". Validação local confirmou a
+instanciação dos três clients (sem chamada de rede) e o erro claro quando a
+API key do provedor selecionado está ausente. Nenhuma chamada real a
+nenhum provedor foi feita, e o grafo do LangGraph e os nós do agente ainda
+não existem.
+
+**Prompt integral:**
+
+```
+O projeto está hoje acoplado ao Gemini (variáveis GOOGLE_API_KEY e
+GEMINI_MODEL, hardcoded no restante do plano como o único provedor). Isso
+precisa mudar: o agente deve ser capaz de rodar com Gemini, Claude
+(Anthropic) ou OpenAI, trocando apenas variáveis de ambiente — sem alterar
+código do grafo ou dos nós nas etapas futuras. O provedor padrão do projeto
+continua sendo Gemini 3 Flash, mas o código não pode assumir isso de forma
+implícita.
+
+Nesta etapa, crie apenas a camada de abstração e configuração do LLM.
+NÃO implemente o grafo do LangGraph, os nós do agente, nem faça nenhuma
+chamada real à API de nenhum provedor. A única validação permitida é
+instanciar o client do LLM localmente (o que não gera chamada de rede) —
+nunca invocá-lo.
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b chore/multi-llm-provider
+
+Execute as etapas abaixo, nesta ordem:
+
+1. ATUALIZAR O requirements.txt
+   Adicione os pacotes dos demais provedores, mantendo o do Gemini:
+   - langchain-google-genai   (já existente — Gemini)
+   - langchain-anthropic      (novo — Claude)
+   - langchain-openai         (novo — OpenAI)
+   Os três ficam como dependência do projeto; qual deles é efetivamente
+   usado em tempo de execução é decidido por variável de ambiente, não por
+   qual pacote está instalado.
+
+2. ATUALIZAR O .env.example
+   Reestruture as variáveis de ambiente para suportar múltiplos provedores,
+   com um "seletor" explícito e uma seção por provedor:
+
+     # Provedor ativo: gemini | anthropic | openai
+     LLM_PROVIDER=gemini
+
+     # Gemini (Google AI Studio)
+     GOOGLE_API_KEY=
+     GEMINI_MODEL=gemini-3-flash
+
+     # Claude (Anthropic) — usado se LLM_PROVIDER=anthropic
+     ANTHROPIC_API_KEY=
+     ANTHROPIC_MODEL=claude-sonnet-5
+
+     # OpenAI — usado se LLM_PROVIDER=openai
+     OPENAI_API_KEY=
+     OPENAI_MODEL=gpt-5.1
+
+     APP_ENV=development
+
+   Apenas as variáveis do provedor efetivamente ativo em LLM_PROVIDER
+   precisam estar preenchidas em um `.env` real; as demais podem ficar
+   vazias. Não invente nomes de modelo além dos citados sem confirmar —
+   apenas documente que o nome do modelo de cada provedor é configurável.
+
+3. REFATORAR app/config.py
+   - Adicione o campo `llm_provider` (Literal["gemini", "anthropic",
+     "openai"], padrão "gemini") às configurações já existentes.
+   - Mantenha os campos por provedor (google_api_key, gemini_model,
+     anthropic_api_key, anthropic_model, openai_api_key, openai_model),
+     todos opcionais no nível do schema — a obrigatoriedade real depende de
+     qual provedor está ativo, e é validada no passo 4, não aqui.
+   - Adicione uma validação (validator do pydantic-settings ou função
+     auxiliar) que, ao carregar as configurações, verifica se a API key do
+     provedor selecionado em `llm_provider` está preenchida, e levanta um
+     erro claro e específico se não estiver (ex.: "GOOGLE_API_KEY é
+     obrigatória quando LLM_PROVIDER=gemini").
+
+4. CRIAR A FÁBRICA DE LLM (app/llm/factory.py)
+   - Crie o pacote `app/llm/` com `__init__.py`.
+   - Implemente uma função `get_llm()` que:
+     - Lê as configurações via `get_settings()` (do Prompt 03);
+     - Com base em `llm_provider`, instancia e retorna o client
+       correspondente, todos compatíveis com a interface `BaseChatModel`
+       do LangChain:
+         - "gemini"    → ChatGoogleGenerativeAI(model=gemini_model, ...)
+         - "anthropic" → ChatAnthropic(model=anthropic_model, ...)
+         - "openai"    → ChatOpenAI(model=openai_model, ...)
+     - Levanta um erro claro se `llm_provider` tiver um valor não suportado.
+   - Esta função é o único ponto do projeto que deve conhecer as classes
+     específicas de cada provedor. Qualquer nó do agente, em prompts
+     futuros, deve chamar apenas `get_llm()` e programar contra a interface
+     genérica do LangChain — nunca importar `ChatGoogleGenerativeAI`,
+     `ChatAnthropic` ou `ChatOpenAI` diretamente fora deste arquivo.
+   - Não chame `.invoke()`, `.generate()` nem qualquer método que dispare
+     uma requisição de rede neste prompt — apenas a instanciação do client.
+
+5. ATUALIZAR O README.md
+   Adicione uma seção "Provedores de LLM suportados" explicando:
+   - Que o projeto suporta Gemini, Claude e OpenAI através da variável
+     `LLM_PROVIDER`;
+   - Como trocar de provedor (mudar `LLM_PROVIDER` e preencher a API key
+     correspondente no `.env`);
+   - Que o provedor padrão/recomendado para este mini-projeto é
+     `gemini` com o modelo `gemini-3-flash`, pelo custo-benefício.
+
+6. VALIDAÇÃO LOCAL (sem chamar nenhuma API)
+   - Rode `pip install -r requirements.txt` e confirme instalação sem erros.
+   - Com um `.env` local de teste, valide os três cenários apenas na
+     instanciação (sem invocar o modelo), por exemplo:
+     LLM_PROVIDER=gemini    python -c "from app.llm.factory import get_llm; print(get_llm())"
+     LLM_PROVIDER=anthropic python -c "from app.llm.factory import get_llm; print(get_llm())"
+     LLM_PROVIDER=openai    python -c "from app.llm.factory import get_llm; print(get_llm())"
+   - Confirme que, faltando a API key do provedor selecionado, o erro de
+     validação descrito no passo 3 aparece de forma clara.
+
+7. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. build: adiciona dependências dos provedores Claude e OpenAI
+   2. chore: reestrutura .env.example para múltiplos provedores de LLM
+   3. refactor: adiciona seletor de provedor e validação em app/config.py
+   4. feat: adiciona fábrica de LLM multi-provedor (app/llm/factory.py)
+   5. docs: documenta provedores de LLM suportados no README
+
+8. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin chore/multi-llm-provider
+
+   Abra o PR direcionado para develop:
+     Título: "refactor: abstração multi-LLM (Gemini, Claude, OpenAI)"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - Nenhuma chamada real a nenhum provedor foi feita
+       - O grafo do LangGraph e os nós do agente ainda não existem
+       - A escolha final do provedor para a entrega continua sendo Gemini
+         3 Flash; os demais existem para portabilidade, não substituição
+
+9. VALIDAÇÃO FINAL
+   Mostre `git log --oneline --graph` e `git status`, confirmando que:
+   - Nenhuma chave de API real foi commitada;
+   - Nenhum outro arquivo do projeto importa diretamente classes de um
+     provedor específico (apenas app/llm/factory.py);
+   - Os commits seguem o padrão semântico do projeto.
+
+Não implemente o grafo do LangGraph, os nós do agente ou qualquer chamada
+real a um modelo nesta etapa — isso continua para os próximos prompts, que
+a partir de agora devem sempre usar app.llm.factory.get_llm() em vez de
+instanciar um provedor diretamente.
+```

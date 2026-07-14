@@ -32,6 +32,7 @@ Mais detalhes em [docs/escopo.md](docs/escopo.md).
 reformatax/
 ├── app/
 │   ├── agent/        # grafo LangGraph (estado, nós, conexões) — futuro
+│   ├── llm/           # fábrica de LLM multi-provedor (get_llm())
 │   ├── tools/         # ferramentas de consulta à base local — futuro
 │   └── web/           # interface web — futuro
 ├── data/
@@ -73,6 +74,30 @@ reformatax/
    e preencha a variável `GOOGLE_API_KEY` no arquivo `.env` local (nunca no
    `.env.example`, que é versionado). A variável `GEMINI_MODEL` já vem
    preenchida com o modelo padrão do projeto (`gemini-3-flash`).
+
+## Provedores de LLM suportados
+
+O agente é capaz de rodar com diferentes provedores de LLM — Gemini
+(Google), Claude (Anthropic) ou OpenAI —, sem alterar código do grafo ou dos
+nós. A troca de provedor é feita inteiramente por variável de ambiente.
+
+- `LLM_PROVIDER` seleciona o provedor ativo: `gemini`, `anthropic` ou
+  `openai`.
+- Cada provedor tem sua própria seção de variáveis no `.env.example`
+  (`GOOGLE_API_KEY`/`GEMINI_MODEL`, `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL`,
+  `OPENAI_API_KEY`/`OPENAI_MODEL`). Apenas as variáveis do provedor
+  selecionado em `LLM_PROVIDER` precisam estar preenchidas no `.env` real;
+  as demais podem ficar vazias.
+- O nome do modelo de cada provedor é configurável através das variáveis
+  `GEMINI_MODEL`, `ANTHROPIC_MODEL` e `OPENAI_MODEL`.
+
+Para trocar de provedor, altere `LLM_PROVIDER` no `.env` e preencha a API
+key correspondente. Nenhum código do agente precisa ser alterado — todo
+acesso ao LLM passa pela fábrica em `app/llm/factory.py`.
+
+O provedor padrão e recomendado para este mini-projeto é `gemini`, com o
+modelo `gemini-3-flash`, pelo custo-benefício. Os demais provedores existem
+para portabilidade entre ambientes, não como substituição da entrega.
 
 ## Próximos passos
 
