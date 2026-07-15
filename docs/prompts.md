@@ -855,3 +855,172 @@ Não implemente o nó de geração com LLM nesta etapa — isso começa no Promp
 que vai inserir gerar_analise entre consultar_base_local e o fim do fluxo,
 usando app.llm.factory.get_llm().
 ```
+
+## Prompt 7 — 2026-07-15
+
+**Resultado:** Branch `feature/geracao-analise-llm` criada a partir de
+`develop`; `app/agent/schemas.py` com o modelo pydantic
+`AnaliseEstruturada` (5 blocos, com descrições para
+`with_structured_output`); `app/agent/prompts.py` com
+`SYSTEM_PROMPT_ANALISE`; nó `gerar_analise` implementado em
+`app/agent/nodes.py`, chamando exclusivamente `app.llm.factory.get_llm()`
+e capturando qualquer falha do LLM em `GeracaoAnaliseError` (uso
+interno/log) sem propagar exceção para fora do nó; grafo atualizado em
+`app/agent/graph.py` com o fluxo completo `validar_entrada →
+identificar_cenario → consultar_base_local → gerar_analise → fim`;
+`tests/test_gerar_analise.py` com 5 testes usando mock de
+`app.agent.nodes.get_llm` (grafo completo para os 3 cenários + caminho de
+erro), e `tests/test_integration_llm.py` com um teste real opcional,
+marcado `@pytest.mark.integration` e excluído da suíte padrão via
+`pytest.ini`. README atualizado com o fluxo completo do agente. Todos os
+16 testes da suíte padrão passam sem nenhuma API key configurada no
+ambiente.
+
+**Prompt integral:**
+
+```
+Vamos implementar o nó gerar_analise do grafo: ele recebe o contexto já
+recuperado da base local (dados_base_local, do nó consultar_base_local) e a
+pergunta do usuário, chama o LLM configurado através de
+app.llm.factory.get_llm() e produz a resposta final estruturada nos 5
+blocos definidos no escopo do projeto. Esta etapa NÃO deve instanciar
+nenhum client de provedor diretamente (ChatGoogleGenerativeAI, ChatAnthropic,
+ChatOpenAI) — sempre use get_llm().
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b feature/geracao-analise-llm
+
+Execute as etapas abaixo, nesta ordem:
+
+1. DEFINIR O SCHEMA DE SAÍDA ESTRUTURADA (app/agent/schemas.py)
+   Crie um modelo `pydantic` chamado `AnaliseEstruturada` com os 5 blocos
+   definidos no escopo (seção 8 do documento de escopo), cada um com uma
+   descrição curta (`Field(..., description=...)`) para orientar o LLM:
+   - cenario_analisado: str
+   - pontos_reforma_relacionados: list[str]
+   - impactos_tecnicos_erp: list[str]
+   - pontos_atencao: list[str]
+   - checklist_tecnico: list[str]
+   Esse schema será usado com `with_structured_output`, então as
+   descrições de cada campo importam — escreva-as claramente, alinhadas ao
+   que já está documentado no escopo.
+
+2. IMPLEMENTAR O PROMPT DE SISTEMA (app/agent/prompts.py)
+   Crie uma constante `SYSTEM_PROMPT_ANALISE` (string) que instrui o LLM a:
+   - Atuar como assistente técnico de apoio a desenvolvedores/analistas de
+     ERP sobre a Reforma Tributária, nos cenários cadastro de produtos,
+     emissão de nota fiscal e cálculo de impostos (IBS/CBS);
+   - Basear a resposta SOMENTE no contexto fornecido (dados recuperados da
+     base local) — nunca inventar informação tributária que não esteja no
+     contexto;
+   - Preencher os 5 blocos do schema `AnaliseEstruturada` de forma objetiva
+     e técnica, em português;
+   - Deixar claro, dentro de `pontos_atencao`, quando algo precisa de
+     validação com a área fiscal/contábil;
+   - Nunca apresentar a resposta como parecer jurídico, fiscal ou contábil
+     definitivo.
+   Não hardcode o conteúdo do JSON aqui — o contexto (dados_base_local) é
+   injetado dinamicamente pelo nó, no passo 3.
+
+3. IMPLEMENTAR O NÓ gerar_analise (em app/agent/nodes.py)
+   - Importe `get_llm` de `app.llm.factory`, `AnaliseEstruturada` de
+     `app.agent.schemas` e `SYSTEM_PROMPT_ANALISE` de `app.agent.prompts`.
+   - Implemente `gerar_analise(state) -> dict`:
+     - Monta as mensagens: uma `SystemMessage` com `SYSTEM_PROMPT_ANALISE`
+       e uma `HumanMessage` contendo a pergunta do usuário
+       (`state["pergunta_usuario"]`) e o contexto recuperado
+       (`state["dados_base_local"]`), formatado de forma legível (ex.:
+       JSON indentado ou texto estruturado);
+     - Obtém o LLM com `llm = get_llm()`;
+     - Usa saída estruturada: `llm.with_structured_output(AnaliseEstruturada)`;
+     - Invoca o modelo com as mensagens montadas;
+     - Em caso de sucesso, salva o resultado em `state["resposta_estruturada"]`
+       (via `.model_dump()`);
+     - Em caso de erro na chamada ao LLM (exceção de rede, timeout, resposta
+       fora do formato esperado), NÃO deixe a exceção propagar: capture,
+       adicione uma mensagem amigável a `alertas` (ex.: "Não foi possível
+       gerar a análise no momento. Tente novamente em instantes.") e deixe
+       `resposta_estruturada` como `None` — a validação final (Prompt 08)
+       vai tratar esse caso.
+   - Defina uma exceção customizada `GeracaoAnaliseError(Exception)` apenas
+     para uso interno/log, se achar necessário — mas o nó em si não deve
+     lançar exceção para fora do grafo.
+
+4. INTEGRAR O NÓ AO GRAFO (app/agent/graph.py)
+   - Adicione o nó `gerar_analise`.
+   - Troque a aresta `consultar_base_local → END` (criada no Prompt 06)
+     por `consultar_base_local → gerar_analise → END`.
+   - Atualize o comentário que indicava "gerar_analise será plugado no
+     Prompt 07" para refletir que isso já foi feito.
+
+5. TESTES COM MOCK DO LLM (tests/test_agent_graph.py e/ou novo arquivo
+   tests/test_gerar_analise.py)
+   IMPORTANTE: os testes automatizados NÃO podem depender de uma API key
+   real nem gastar tokens de nenhum provedor. Para isso:
+   - Use `unittest.mock.patch` (ou `monkeypatch`) para substituir
+     `app.llm.factory.get_llm` por uma função que retorna um objeto "fake"
+     cujo `.with_structured_output(...)` retorna um objeto com `.invoke(...)`
+     que devolve uma instância fixa de `AnaliseEstruturada` (dados de
+     exemplo, sem chamar API nenhuma).
+   - Com esse mock, teste o grafo completo de ponta a ponta para os 3
+     cenários válidos, confirmando que `resposta_estruturada` chega
+     preenchido com os 5 blocos esperados ao final do fluxo.
+   - Teste também o caminho de erro: mock que simula uma exceção ao
+     invocar o LLM, e confirme que `alertas` é populado e o grafo não
+     quebra (não lança exceção para quem chamou `.invoke()`).
+   - Rode `pytest tests/ -v` e confirme que TODOS os testes passam sem
+     nenhuma variável de API key configurada no ambiente de teste.
+
+6. (OPCIONAL) TESTE DE INTEGRAÇÃO REAL, ISOLADO DO RESTANTE
+   Se quiser validar manualmente contra o Gemini de verdade:
+   - Crie um teste separado marcado com `@pytest.mark.integration`
+     (registre o marker em `pytest.ini` ou `pyproject.toml`).
+   - Configure o `pytest.ini`/`pyproject.toml` para que esse marker seja
+     ignorado por padrão (`addopts = -m "not integration"`), rodando
+     apenas quando chamado explicitamente com `pytest -m integration`.
+   - Esse teste só deve rodar localmente, manualmente, com uma
+     GOOGLE_API_KEY real no `.env` — nunca em CI, para não gerar custo
+     nem depender de rede.
+
+7. ATUALIZAR O README.md
+   - Marque no diagrama/descrição do fluxo do agente que o grafo agora
+     está completo: validar_entrada → identificar_cenario →
+     consultar_base_local → gerar_analise → fim.
+   - Adicione uma nota curta avisando que gerar_analise consome a API do
+     provedor configurado em LLM_PROVIDER (Gemini 3 Flash por padrão) e que
+     os testes automatizados usam mock, não gastando tokens.
+
+8. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. feat: adiciona schema de saída estruturada da análise (AnaliseEstruturada)
+   2. feat: adiciona prompt de sistema do nó de geração
+   3. feat: implementa o nó gerar_analise usando get_llm()
+   4. feat: integra gerar_analise ao grafo (fluxo completo)
+   5. test: adiciona testes do grafo completo com mock do LLM
+   6. docs: atualiza README com o fluxo completo do agente
+
+9. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin feature/geracao-analise-llm
+
+   Abra o PR direcionado para develop:
+     Título: "feat: geração de análise estruturada via LLM (gerar_analise)"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - Validação final formal da resposta (retry em caso de formato
+         inesperado) fica para o Prompt 08
+       - A interface web ainda não consome este grafo
+       - Nenhuma chave de API real foi usada nos testes automatizados
+
+10. VALIDAÇÃO FINAL
+    Mostre a saída de `pytest tests/ -v` (sem GOOGLE_API_KEY configurada,
+    para provar que os testes não dependem de API real), `git log --oneline
+    --graph` e `git status`, confirmando que:
+    - Todos os testes passam sem nenhuma chave de API configurada;
+    - `app/agent/nodes.py` só acessa o LLM através de `get_llm()`, nunca
+      instanciando um client de provedor diretamente;
+    - Os commits seguem o padrão semântico do projeto.
+
+Não implemente a validação/retry formal da resposta final nem a interface
+web nesta etapa — isso continua nos Prompts 08 e 09.
+```

@@ -1,11 +1,9 @@
 """Grafo do agente (LangGraph).
 
-Nesta etapa, o grafo é 100% determinístico: valida a entrada, identifica o
-cenário por palavras-chave e consulta a base local — sem nenhuma chamada a
-LLM. O nó `gerar_analise`, que efetivamente chama o LLM configurado via
-`app.llm.factory.get_llm()`, será inserido em um prompt futuro entre
-`consultar_base_local` e o fim do fluxo (hoje, `consultar_base_local`
-aponta diretamente para END).
+Fluxo completo: valida a entrada, identifica o cenário por palavras-chave,
+consulta a base local e gera a análise estruturada via LLM. O único nó que
+chama um LLM é `gerar_analise`, sempre através de `app.llm.factory.get_llm()`
+— este módulo não instancia nenhum client de provedor diretamente.
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ from langgraph.graph.state import CompiledStateGraph
 from app.agent.nodes import (
     CENARIO_FORA_DE_ESCOPO,
     consultar_base_local,
+    gerar_analise,
     identificar_cenario,
     responder_entrada_invalida,
     responder_fora_de_escopo,
@@ -43,6 +42,7 @@ def build_graph() -> CompiledStateGraph:
     grafo.add_node("validar_entrada", validar_entrada)
     grafo.add_node("identificar_cenario", identificar_cenario)
     grafo.add_node("consultar_base_local", consultar_base_local)
+    grafo.add_node("gerar_analise", gerar_analise)
     grafo.add_node("responder_entrada_invalida", responder_entrada_invalida)
     grafo.add_node("responder_fora_de_escopo", responder_fora_de_escopo)
 
@@ -67,6 +67,7 @@ def build_graph() -> CompiledStateGraph:
 
     grafo.add_edge("responder_entrada_invalida", END)
     grafo.add_edge("responder_fora_de_escopo", END)
-    grafo.add_edge("consultar_base_local", END)
+    grafo.add_edge("consultar_base_local", "gerar_analise")
+    grafo.add_edge("gerar_analise", END)
 
     return grafo.compile()
