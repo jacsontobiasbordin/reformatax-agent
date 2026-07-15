@@ -1,15 +1,22 @@
-"""Nós determinísticos do grafo do agente.
+"""Nós do grafo do agente.
 
-Nenhuma função deste módulo chama um LLM — a identificação de cenário usa
-uma heurística simples por palavras-chave, e as respostas de erro/fora de
-escopo são montadas com texto fixo. O nó que efetivamente chama o LLM
-(gerar_analise, via app.llm.factory.get_llm()) será adicionado em um prompt
-futuro.
+A identificação de cenário usa uma heurística simples por palavras-chave
+(sem LLM), e as respostas de erro/fora de escopo são montadas com texto
+fixo. O único nó que chama um LLM é `gerar_analise`, sempre através de
+`app.llm.factory.get_llm()` — nunca instanciando um client de provedor
+diretamente.
 """
 
 from __future__ import annotations
 
+import json
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from app.agent.prompts import SYSTEM_PROMPT_ANALISE
+from app.agent.schemas import AnaliseEstruturada
 from app.agent.state import AgentState
+from app.llm.factory import get_llm
 from app.tools.local_kb import (
     BaseLocalIndisponivelError,
     CenarioNaoEncontradoError,
@@ -117,3 +124,57 @@ def responder_fora_de_escopo(state: AgentState) -> dict:
             ),
         }
     }
+
+
+class GeracaoAnaliseError(Exception):
+    """Erro interno ao chamar o LLM — usada apenas para log/depuração.
+
+    Nunca propaga para fora do nó gerar_analise: é capturada e convertida
+    em uma mensagem amigável em `alertas`.
+    """
+
+
+def _invocar_llm_estruturado(mensagens: list) -> AnaliseEstruturada:
+    """Chama o LLM configurado via get_llm() e retorna a análise estruturada.
+
+    Qualquer falha (rede, timeout, formato de resposta inesperado) é
+    relançada como GeracaoAnaliseError, preservando a causa original.
+    """
+    try:
+        llm = get_llm()
+        llm_estruturado = llm.with_structured_output(AnaliseEstruturada)
+        return llm_estruturado.invoke(mensagens)
+    except Exception as e:
+        raise GeracaoAnaliseError("Falha ao gerar análise via LLM") from e
+
+
+def gerar_analise(state: AgentState) -> dict:
+    """Gera a análise estruturada chamando o LLM configurado via get_llm().
+
+    Em caso de erro na chamada ao LLM, não deixa a exceção propagar:
+    adiciona uma mensagem amigável a `alertas` e mantém
+    `resposta_estruturada` como None — a validação final desse caso fica
+    para um prompt futuro.
+    """
+    contexto = json.dumps(state["dados_base_local"], indent=2, ensure_ascii=False)
+    mensagens = [
+        SystemMessage(content=SYSTEM_PROMPT_ANALISE),
+        HumanMessage(
+            content=(
+                f"Pergunta do usuário:\n{state['pergunta_usuario']}\n\n"
+                f"Contexto recuperado da base de conhecimento local:\n{contexto}"
+            )
+        ),
+    ]
+
+    try:
+        resultado = _invocar_llm_estruturado(mensagens)
+        return {"resposta_estruturada": resultado.model_dump()}
+    except GeracaoAnaliseError:
+        return {
+            "alertas": [
+                *state.get("alertas", []),
+                "Não foi possível gerar a análise no momento. "
+                "Tente novamente em instantes.",
+            ]
+        }
