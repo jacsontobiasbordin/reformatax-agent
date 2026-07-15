@@ -119,28 +119,44 @@ dados = consultar_cenario("cadastro_produtos")
 
 ## Grafo do agente (LangGraph)
 
-O fluxo do agente é implementado como um grafo do LangGraph em `app/agent`:
+O fluxo do agente é implementado como um grafo do LangGraph em `app/agent`,
+e agora está **completo**:
+
+```
+validar_entrada → identificar_cenario → consultar_base_local → gerar_analise → fim
+```
 
 - `app/agent/state.py` — define `AgentState`, o estado compartilhado entre
   os nós (pergunta do usuário, cenário identificado, dados da base local,
   resposta estruturada e alertas de validação).
-- `app/agent/nodes.py` — implementa os nós determinísticos do fluxo:
-  `validar_entrada`, `identificar_cenario` (heurística por palavras-chave,
-  sem LLM), `consultar_base_local` (integra com
-  `app/tools/local_kb.py`), `responder_entrada_invalida` e
-  `responder_fora_de_escopo`.
+- `app/agent/nodes.py` — implementa os nós do fluxo: `validar_entrada`,
+  `identificar_cenario` (heurística por palavras-chave, sem LLM),
+  `consultar_base_local` (integra com `app/tools/local_kb.py`),
+  `responder_entrada_invalida`, `responder_fora_de_escopo` e
+  `gerar_analise` (único nó que chama um LLM, sempre via
+  `app.llm.factory.get_llm()`).
+- `app/agent/schemas.py` — define `AnaliseEstruturada`, o schema
+  `pydantic` dos 5 blocos da resposta final, usado com
+  `with_structured_output`.
+- `app/agent/prompts.py` — define o prompt de sistema do nó
+  `gerar_analise`.
 - `app/agent/graph.py` — monta o `StateGraph`, com arestas condicionais
   para tratar entrada inválida e perguntas fora dos três cenários
   suportados, e expõe `build_graph()`, que retorna o grafo já compilado.
 
-**Nesta versão, o grafo termina em `consultar_base_local`** — ainda não há
-nenhuma chamada a LLM. A geração da análise a partir dos dados da base
-local (nó `gerar_analise`, usando `app.llm.factory.get_llm()`) entra em um
-prompt futuro, entre `consultar_base_local` e o fim do fluxo.
+O nó `gerar_analise` consome a API do provedor configurado em
+`LLM_PROVIDER` (Gemini 3 Flash por padrão) para gerar a resposta
+estruturada a partir do contexto recuperado da base local. Os testes
+automatizados (`tests/test_gerar_analise.py`) usam mock do LLM — não
+gastam tokens nem exigem API key real. Há também um teste de integração
+opcional (`tests/test_integration_llm.py`, marcado com
+`@pytest.mark.integration`), que chama o provedor de verdade e só roda
+manualmente com `pytest -m integration` (fica de fora da suíte padrão,
+configurada em `pytest.ini`).
 
 ## Próximos passos
 
-- Inserção do nó `gerar_analise` (LLM) no grafo do agente.
+- Validação final da resposta gerada (retry em caso de formato inesperado).
 - Implementação da interface web (`app/web`).
 - Ampliação dos testes automatizados (`tests`).
 
