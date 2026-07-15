@@ -686,3 +686,172 @@ Execute as etapas abaixo, nesta ordem:
 Não implemente o grafo do LangGraph, os nós do agente, nem qualquer chamada
 a get_llm() nesta etapa — isso começa no Prompt 06.
 ```
+
+## Prompt 6 — 2026-07-14
+
+**Resultado:** Branch `feature/grafo-langgraph-estado` criada a partir de
+`develop`; `app/agent/state.py` com o `TypedDict AgentState`;
+`app/agent/nodes.py` com os nós determinísticos `validar_entrada`,
+`identificar_cenario` (heurística por palavras-chave), `consultar_base_local`
+(integrado com `app.tools.local_kb`), `responder_entrada_invalida` e
+`responder_fora_de_escopo`; `app/agent/graph.py` com `build_graph()`
+montando um `StateGraph` com arestas condicionais para entrada inválida e
+cenário fora de escopo, terminando em `consultar_base_local` → END;
+`tests/test_agent_graph.py` com 5 testes de ponta a ponta (11 testes no
+total no projeto, todos passando). README atualizado com a seção "Grafo do
+agente (LangGraph)". Nenhuma chamada a `get_llm()` ou a qualquer provedor
+de LLM foi feita nesta etapa.
+
+**Prompt integral:**
+
+```
+Vamos montar o esqueleto do grafo do agente com LangGraph: o estado
+compartilhado, os nós de validação e identificação de cenário, a integração
+com a ferramenta de consulta local (app/tools/local_kb.py, do Prompt 05) e
+as arestas condicionais do fluxo. NÃO implemente o nó de geração de análise
+com LLM nem chame app.llm.factory.get_llm() nesta etapa — isso é o Prompt
+07. Os nós desta etapa devem ser 100% determinísticos.
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b feature/grafo-langgraph-estado
+
+Execute as etapas abaixo, nesta ordem:
+
+1. DEFINIR O ESTADO DO GRAFO (app/agent/state.py)
+   Crie um `TypedDict` chamado `AgentState` com os campos definidos no
+   escopo do projeto:
+   - pergunta_usuario: str
+   - cenario_identificado: str | None
+   - dados_base_local: dict | None
+   - resposta_estruturada: dict | None
+   - alertas: list[str]
+   Adicione um docstring explicando o propósito de cada campo. Use
+   `from __future__ import annotations` e tipagem do `typing`/`typing_extensions`
+   compatível com o LangGraph.
+
+2. IMPLEMENTAR OS NÓS DETERMINÍSTICOS (app/agent/nodes.py)
+   Implemente as seguintes funções, cada uma recebendo e retornando um
+   `AgentState` (ou o dicionário parcial de atualização, conforme o padrão
+   do LangGraph):
+
+   a) validar_entrada(state) -> dict
+      - Remove espaços extras da pergunta (`strip()`).
+      - Se a pergunta estiver vazia após o strip, adiciona a `alertas` a
+        mensagem: "Por favor, informe uma pergunta ou selecione um cenário."
+      - Se a pergunta tiver mais que 500 caracteres, adiciona a `alertas`:
+        "Sua pergunta é muito longa. Tente resumir em até 500 caracteres."
+      - Não lança exceção — apenas popula `alertas`; quem decide o que
+        fazer com isso é a aresta condicional do passo 4.
+
+   b) identificar_cenario(state) -> dict
+      - Implementação determinística por palavras-chave (sem LLM), usando
+        listas simples de termos, case-insensitive, em português:
+          cadastro_produtos: ["cadastro", "produto", "ncm",
+            "classificação tributária", "cclasstrib"]
+          emissao_nota_fiscal: ["nota fiscal", "nf-e", "nfe", "nfc-e",
+            "emissão", "danfe"]
+          calculo_impostos: ["cálculo", "calculo", "imposto", "ibs", "cbs",
+            "tributo", "alíquota", "aliquota"]
+      - Se nenhum termo bater, define `cenario_identificado = "fora_de_escopo"`.
+      - Documente no código, com um comentário curto, que esta é uma
+        heurística simples e que uma versão futura poderia usar o LLM para
+        casos ambíguos — mas isso não deve ser implementado agora.
+
+   c) consultar_base_local(state) -> dict
+      - Chama `consultar_cenario(state["cenario_identificado"])` de
+        `app.tools.local_kb`.
+      - Guarda o resultado em `dados_base_local`.
+      - Se a ferramenta lançar `CenarioNaoEncontradoError` ou
+        `BaseLocalIndisponivelError`, capture a exceção e adicione uma
+        mensagem amigável a `alertas` (sem deixar a exceção propagar para
+        fora do nó).
+
+   d) responder_entrada_invalida(state) -> dict
+      - Monta um `resposta_estruturada` simplificado (ex.: apenas um campo
+        `mensagem`) repetindo o conteúdo de `alertas`, indicando que a
+        pergunta precisa ser ajustada.
+
+   e) responder_fora_de_escopo(state) -> dict
+      - Monta um `resposta_estruturada` simplificado explicando que a
+        pergunta não se encaixa em nenhum dos três cenários suportados
+        (cadastro de produtos, emissão de nota fiscal, cálculo de
+        impostos) e sugerindo reformular a pergunta.
+
+3. MONTAR O GRAFO (app/agent/graph.py)
+   Usando `langgraph.graph.StateGraph` e `AgentState`:
+   - Adicione os nós: validar_entrada, identificar_cenario,
+     consultar_base_local, responder_entrada_invalida,
+     responder_fora_de_escopo.
+   - Defina o ponto de entrada como validar_entrada.
+   - Aresta condicional após validar_entrada:
+       - se `alertas` não estiver vazia → responder_entrada_invalida → END
+       - caso contrário → identificar_cenario
+   - Aresta condicional após identificar_cenario:
+       - se `cenario_identificado == "fora_de_escopo"` →
+         responder_fora_de_escopo → END
+       - caso contrário → consultar_base_local
+   - Aresta direta: consultar_base_local → END (temporário; no Prompt 07 este
+     nó passará a apontar para o novo nó `gerar_analise` em vez de END).
+   - Exponha uma função `build_graph()` que monta e retorna o grafo
+     **compilado** (`.compile()`), pronta para ser usada com `.invoke()`.
+   - Adicione um comentário no topo do arquivo indicando claramente que o
+     nó gerar_analise (com LLM) será plugado no Prompt 07 entre
+     consultar_base_local e o fim do fluxo.
+
+4. ESCREVER TESTES DO GRAFO (tests/test_agent_graph.py)
+   Usando `pytest`, cubra pelo menos estes cenários de ponta a ponta,
+   chamando `build_graph().invoke({...})`:
+   - Pergunta válida sobre cadastro de produtos → `cenario_identificado ==
+     "cadastro_produtos"` e `dados_base_local` preenchido.
+   - Pergunta válida sobre nota fiscal → mesmo padrão para
+     "emissao_nota_fiscal".
+   - Pergunta válida sobre cálculo de impostos → mesmo padrão para
+     "calculo_impostos".
+   - Pergunta vazia ou só com espaços → `resposta_estruturada` presente com
+     mensagem de erro de validação, `dados_base_local` continua `None`.
+   - Pergunta fora de escopo (ex.: "qual a previsão do tempo hoje?") →
+     `cenario_identificado == "fora_de_escopo"` e `resposta_estruturada`
+     com mensagem amigável.
+   Rode `pytest tests/ -v` e confirme que todos os testes passam,
+   incluindo os já existentes do Prompt 05.
+
+5. ATUALIZAR O README.md
+   Atualize a seção do fluxo do agente (que hoje está apenas descrita em
+   prosa/diagrama no escopo) apontando para os arquivos reais:
+   `app/agent/state.py`, `app/agent/nodes.py`, `app/agent/graph.py`. Deixe
+   explícito que, nesta versão, o grafo termina em `consultar_base_local`
+   e que a geração da análise com LLM entra no próximo prompt.
+
+6. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. feat: adiciona o estado do agente (AgentState)
+   2. feat: implementa nós determinísticos de validação e identificação de cenário
+   3. feat: monta o grafo langgraph com arestas condicionais
+   4. test: adiciona testes de ponta a ponta do grafo
+   5. docs: documenta a estrutura do grafo no README
+
+7. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin feature/grafo-langgraph-estado
+
+   Abra o PR direcionado para develop:
+     Título: "feat: estado e esqueleto do grafo LangGraph"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - Nenhuma chamada a get_llm() ou a qualquer provedor de LLM foi feita
+       - O nó gerar_analise ainda não existe; o grafo termina em
+         consultar_base_local
+       - A interface web ainda não consome este grafo
+
+8. VALIDAÇÃO FINAL
+   Mostre a saída de `pytest tests/ -v`, `git log --oneline --graph` e
+   `git status`, confirmando que:
+   - Todos os testes passam (incluindo os da ferramenta do Prompt 05);
+   - Nenhum arquivo em app/agent/ importa app.llm.factory ou qualquer
+     client de LLM;
+   - Os commits seguem o padrão semântico do projeto.
+
+Não implemente o nó de geração com LLM nesta etapa — isso começa no Prompt 07,
+que vai inserir gerar_analise entre consultar_base_local e o fim do fluxo,
+usando app.llm.factory.get_llm().
+```
