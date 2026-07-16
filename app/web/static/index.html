@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReformaTax Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="pagina">
+    <header class="cabecalho">
+      <h1>ReformaTax Agent</h1>
+      <p class="descricao">
+        Assistente técnico que analisa impactos da Reforma Tributária
+        (IBS/CBS) em cadastro de produtos, emissão de nota fiscal e cálculo
+        de impostos no seu ERP.
+      </p>
+    </header>
+
+    <main class="conteudo">
+      <section class="formulario">
+        <label for="pergunta">Sua pergunta ou cenário</label>
+        <textarea
+          id="pergunta"
+          rows="4"
+          maxlength="1000"
+          placeholder="Ex.: Quais impactos da Reforma Tributária no cadastro de produtos do ERP?"
+        ></textarea>
+
+        <div class="botoes-rapidos" id="botoes-rapidos">
+          <span class="botoes-rapidos-titulo">Cenários rápidos:</span>
+          <!-- Preenchido dinamicamente por app.js a partir de GET /api/cenarios -->
+        </div>
+
+        <button id="btn-analisar" class="botao-primario" type="button">
+          Analisar impacto
+        </button>
+
+        <div id="area-progresso" class="area-progresso" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span>Analisando...</span>
+        </div>
+      </section>
+
+      <section id="area-resultado" class="area-resultado" hidden>
+        <div id="area-alerta" class="alerta" hidden></div>
+
+        <div id="cards" class="cards" hidden>
+          <article class="card">
+            <h2>Cenário analisado</h2>
+            <p id="card-cenario"></p>
+          </article>
+          <article class="card">
+            <h2>Pontos da reforma relacionados</h2>
+            <ul id="card-pontos-reforma"></ul>
+          </article>
+          <article class="card">
+            <h2>Impactos técnicos no ERP</h2>
+            <ul id="card-impactos-erp"></ul>
+          </article>
+          <article class="card">
+            <h2>Pontos de atenção</h2>
+            <ul id="card-pontos-atencao"></ul>
+          </article>
+          <article class="card">
+            <h2>Checklist técnico</h2>
+            <ul id="card-checklist"></ul>
+          </article>
+        </div>
+
+        <div class="acoes-resultado">
+          <button id="btn-copiar" class="botao-secundario" type="button" disabled>
+            Copiar resposta
+          </button>
+          <button id="btn-baixar" class="botao-secundario" type="button" disabled>
+            Baixar relatório
+          </button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
