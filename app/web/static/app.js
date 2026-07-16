@@ -36,6 +36,8 @@ const elCardImpactosErp = document.getElementById("card-impactos-erp");
 const elCardPontosAtencao = document.getElementById("card-pontos-atencao");
 const elCardChecklist = document.getElementById("card-checklist");
 
+let ultimoRelatorioTexto = "";
+
 async function carregarCenarios() {
   try {
     const resposta = await fetch("/api/cenarios");
@@ -70,12 +72,34 @@ function preencherLista(elementoUl, itens) {
   });
 }
 
+function montarTextoRelatorio(analise) {
+  const linhas = [
+    "ReformaTax Agent — Análise de Impacto\n",
+    "Cenário analisado:",
+    analise.cenario_analisado,
+    "",
+    "Pontos da reforma relacionados:",
+    ...analise.pontos_reforma_relacionados.map((item) => `- ${item}`),
+    "",
+    "Impactos técnicos no ERP:",
+    ...analise.impactos_tecnicos_erp.map((item) => `- ${item}`),
+    "",
+    "Pontos de atenção:",
+    ...analise.pontos_atencao.map((item) => `- ${item}`),
+    "",
+    "Checklist técnico:",
+    ...analise.checklist_tecnico.map((item) => `- ${item}`),
+  ];
+  return linhas.join("\n");
+}
+
 function exibirAlerta(mensagens) {
   elAreaAlerta.textContent = mensagens.join(" ");
   elAreaAlerta.hidden = false;
   elCards.hidden = true;
   elBtnCopiar.disabled = true;
   elBtnBaixar.disabled = true;
+  ultimoRelatorioTexto = "";
 }
 
 function exibirCards(analise) {
@@ -88,6 +112,7 @@ function exibirCards(analise) {
   elAreaAlerta.hidden = true;
   elCards.hidden = false;
 
+  ultimoRelatorioTexto = montarTextoRelatorio(analise);
   elBtnCopiar.disabled = false;
   elBtnBaixar.disabled = false;
 }
@@ -141,6 +166,30 @@ async function analisar() {
   }
 }
 
+async function copiarResposta() {
+  if (!ultimoRelatorioTexto) return;
+  try {
+    await navigator.clipboard.writeText(ultimoRelatorioTexto);
+  } catch (erro) {
+    console.warn("Não foi possível copiar para a área de transferência.", erro);
+  }
+}
+
+function baixarRelatorio() {
+  if (!ultimoRelatorioTexto) return;
+  const blob = new Blob([ultimoRelatorioTexto], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "reformatax-analise.txt";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 elBtnAnalisar.addEventListener("click", analisar);
+elBtnCopiar.addEventListener("click", copiarResposta);
+elBtnBaixar.addEventListener("click", baixarRelatorio);
 
 carregarCenarios();
