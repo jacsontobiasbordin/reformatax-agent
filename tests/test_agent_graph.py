@@ -10,6 +10,7 @@ def _estado_inicial(pergunta: str) -> dict:
         "dados_base_local": None,
         "resposta_estruturada": None,
         "alertas": [],
+        "tentativas_geracao": 0,
     }
 
 
