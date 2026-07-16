@@ -1024,3 +1024,154 @@ Execute as etapas abaixo, nesta ordem:
 Não implemente a validação/retry formal da resposta final nem a interface
 web nesta etapa — isso continua nos Prompts 08 e 09.
 ```
+
+## Prompt 8 — 2026-07-16
+
+**Resultado:** Branch `feature/validacao-resposta` criada a partir de
+`develop`; `app/agent/state.py` com o campo `tentativas_geracao` no
+`AgentState`; nó `gerar_analise` (em `app/agent/nodes.py`) ajustado para
+incrementar `tentativas_geracao` a cada execução, sem alterar o restante
+do comportamento do Prompt 07; novos nós `validar_resposta` (com a função
+auxiliar `_resposta_e_valida`, que confere os 5 blocos do schema) e
+`responder_erro_geracao` (fallback com mensagem amigável, preservando
+`alertas`), com a constante `MAX_TENTATIVAS_GERACAO = 2`; grafo atualizado
+em `app/agent/graph.py` com o laço `gerar_analise ⇄ validar_resposta` e a
+aresta condicional final (sucesso → fim | retry | tentativas esgotadas →
+`responder_erro_geracao` → fim); `tests/test_validacao_resposta.py` criado
+cobrindo sucesso na 1ª tentativa, retry bem-sucedido na 2ª, esgotamento de
+`MAX_TENTATIVAS_GERACAO` tentativas e ausência de loop infinito mesmo com
+o LLM sempre falhando; `tests/test_gerar_analise.py` e
+`tests/test_agent_graph.py` ajustados para o novo campo
+`tentativas_geracao` e para o novo comportamento de fallback após esgotar
+retries. Todos os 24 testes da suíte padrão passam sem nenhuma API key
+configurada no ambiente. Com este prompt, o grafo do agente fica
+funcionalmente completo de ponta a ponta.
+
+**Prompt integral:**
+
+```
+Vamos implementar o nó validar_resposta, responsável por conferir se a
+resposta estruturada gerada pelo LLM (Prompt 07) está completa e, se não
+estiver, acionar uma nova tentativa de geração (retry) antes de desistir e
+retornar uma mensagem de erro amigável. NÃO altere a lógica interna do nó
+gerar_analise além do necessário para suportar o retry, e não instancie
+nenhum client de provedor diretamente — continue usando get_llm().
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b feature/validacao-resposta
+
+Execute as etapas abaixo, nesta ordem:
+
+1. ATUALIZAR O ESTADO (app/agent/state.py)
+   Adicione ao `AgentState` o campo:
+   - tentativas_geracao: int
+   Documente que esse campo controla quantas vezes o nó gerar_analise já
+   foi executado, para permitir um número limitado de retries. O valor
+   inicial, ao montar o estado de entrada do grafo (na chamada de
+   `.invoke({...})`), deve ser 0 — deixe isso documentado no README também
+   (passo 6).
+
+2. AJUSTAR O NÓ gerar_analise (app/agent/nodes.py)
+   - No início da função, incremente `tentativas_geracao` (trate a
+     ausência da chave com `state.get("tentativas_geracao", 0) + 1`) e
+     inclua o novo valor no dicionário de retorno do nó.
+   - Mantenha o restante do comportamento do Prompt 07 (chamada via
+     get_llm(), captura de erro sem propagar exceção).
+
+3. IMPLEMENTAR O NÓ validar_resposta (app/agent/nodes.py)
+   - Defina uma constante `MAX_TENTATIVAS_GERACAO = 2` no topo do arquivo
+     (ou em app/agent/nodes.py mesmo, próximo ao nó).
+   - Implemente uma função auxiliar `_resposta_e_valida(resposta: dict |
+     None) -> bool` que retorna True somente se `resposta` não for `None` e
+     todos os 5 campos do schema (`cenario_analisado`,
+     `pontos_reforma_relacionados`, `impactos_tecnicos_erp`,
+     `pontos_atencao`, `checklist_tecnico`) estiverem presentes e não
+     vazios (strings não em branco, listas com pelo menos 1 item).
+   - Implemente `validar_resposta(state) -> dict`:
+     - Verifica `_resposta_e_valida(state.get("resposta_estruturada"))`;
+     - Não precisa alterar o estado se a resposta for válida — apenas
+       repassa adiante (esse nó existe principalmente para a decisão de
+       roteamento do passo 4, e pode adicionar um alerta informativo se
+       quiser logar que a validação passou).
+
+4. IMPLEMENTAR O NÓ DE FALLBACK (app/agent/nodes.py)
+   - `responder_erro_geracao(state) -> dict`:
+     - Monta um `resposta_estruturada` de fallback (mesmo formato
+       simplificado usado em responder_entrada_invalida/
+       responder_fora_de_escopo do Prompt 06), com uma mensagem como:
+       "Não foi possível concluir a análise após múltiplas tentativas.
+       Tente novamente em instantes ou reformule sua pergunta."
+     - Preserva os `alertas` já acumulados, para fins de diagnóstico.
+
+5. AJUSTAR O GRAFO (app/agent/graph.py)
+   - Adicione os nós validar_resposta e responder_erro_geracao.
+   - Troque a aresta gerar_analise → END (do Prompt 07) por
+     gerar_analise → validar_resposta.
+   - Adicione a aresta condicional após validar_resposta:
+       - se a resposta for válida → END;
+       - se for inválida E tentativas_geracao < MAX_TENTATIVAS_GERACAO →
+         volta para gerar_analise (retry);
+       - se for inválida E tentativas_geracao >= MAX_TENTATIVAS_GERACAO →
+         responder_erro_geracao → END.
+   - Atualize os comentários do arquivo para refletir que o fluxo completo
+     agora é:
+     validar_entrada → identificar_cenario → consultar_base_local →
+     gerar_analise ⇄ validar_resposta → (END | responder_erro_geracao → END)
+
+6. ATUALIZAR O README.md
+   - Atualize o diagrama/descrição do fluxo do agente incluindo o laço de
+     retry entre gerar_analise e validar_resposta, com o limite de
+     MAX_TENTATIVAS_GERACAO tentativas.
+   - Documente que o estado inicial esperado ao chamar o grafo deve incluir
+     `tentativas_geracao: 0` (ou que o código já trata a ausência do campo
+     como 0 na primeira execução).
+
+7. TESTES (tests/test_agent_graph.py ou novo tests/test_validacao_resposta.py)
+   Usando mock de get_llm() (nunca chamando API real), cubra:
+   - Resposta válida na primeira tentativa → grafo encerra com
+     resposta_estruturada completo e tentativas_geracao == 1.
+   - Resposta inválida na primeira tentativa, válida na segunda (mock com
+     `side_effect`/sequência de retornos) → grafo encerra com sucesso e
+     tentativas_geracao == 2.
+   - Resposta inválida em todas as tentativas (até MAX_TENTATIVAS_GERACAO)
+     → grafo encerra via responder_erro_geracao, com resposta_estruturada
+     contendo a mensagem de fallback e alertas preenchidos.
+   - Confirme que o grafo nunca entra em loop infinito (ou seja, o limite
+     de tentativas é respeitado mesmo se o mock sempre falhar).
+   Rode `pytest tests/ -v` e confirme que todos os testes passam sem
+   nenhuma API key configurada.
+
+8. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. feat: adiciona controle de tentativas ao estado do agente
+   2. feat: implementa validar_resposta e responder_erro_geracao
+   3. feat: adiciona laço de retry entre gerar_analise e validar_resposta
+   4. test: adiciona testes de retry e fallback do grafo completo
+   5. docs: atualiza README com o comportamento de validação e retry
+
+9. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin feature/validacao-resposta
+
+   Abra o PR direcionado para develop:
+     Título: "feat: validação da resposta final com retry"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - A interface web ainda não consome este grafo (fica para o
+         Prompt 09)
+       - Nenhuma chave de API real foi usada nos testes automatizados
+
+10. VALIDAÇÃO FINAL
+    Mostre a saída de `pytest tests/ -v` (sem GOOGLE_API_KEY configurada),
+    `git log --oneline --graph` e `git status`, confirmando que:
+    - Todos os testes passam, incluindo o cenário de esgotamento de
+      tentativas;
+    - O grafo sempre termina (nenhum caminho de execução resulta em loop
+      infinito);
+    - Os commits seguem o padrão semântico do projeto.
+
+Com este prompt, o grafo do agente fica funcionalmente completo de ponta a
+ponta (entrada → validação → identificação → consulta → geração →
+validação final). O próximo prompt (09) implementa a interface web que
+consome esse grafo.
+```
