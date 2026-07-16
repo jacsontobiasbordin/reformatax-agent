@@ -5,9 +5,19 @@
 Assistente de IA que analisa impactos técnicos da Reforma Tributária
 brasileira em sistemas ERP.
 
+**O problema:** com a Reforma Tributária, empresas que utilizam sistemas
+ERP precisam revisar cadastros, regras fiscais, cálculos e documentos
+fiscais. Desenvolvedores e analistas de sistemas têm dificuldade em
+identificar rapidamente quais partes do ERP são impactadas. O ReformaTax
+Agent apoia essa primeira análise técnica, organizando as informações de
+forma simples e objetiva — sem substituir parecer jurídico, fiscal ou
+contábil definitivo. Mais contexto em [docs/escopo.md](docs/escopo.md).
+
 ## Status
 
-🚧 Em desenvolvimento — estrutura inicial do projeto.
+✅ Mini-projeto avaliativo completo: agente com LangGraph (validação,
+identificação de cenário, ferramenta de consulta local, geração via LLM
+com retry) e interface web (FastAPI) funcionando de ponta a ponta.
 
 ## Objetivo do agente
 
@@ -31,16 +41,17 @@ Mais detalhes em [docs/escopo.md](docs/escopo.md).
 ```
 reformatax/
 ├── app/
-│   ├── agent/        # grafo LangGraph (estado, nós, conexões) — futuro
+│   ├── agent/         # grafo LangGraph: state.py, nodes.py, schemas.py, prompts.py, graph.py
 │   ├── llm/           # fábrica de LLM multi-provedor (get_llm())
-│   ├── tools/         # ferramentas de consulta à base local — futuro
-│   └── web/           # interface web — futuro
+│   ├── tools/         # ferramenta de consulta à base local (local_kb.py)
+│   ├── web/           # API FastAPI (main.py, schemas.py) + interface estática (static/)
+│   └── config.py      # configurações (pydantic-settings)
 ├── data/
 │   └── reforma_tributaria_erp.json
 ├── docs/
 │   ├── escopo.md
 │   ├── prompts.md
-│   └── apresentacao/
+│   └── apresentacao/  # slides da apresentação (.pptx)
 ├── tests/
 ├── .env.example
 ├── .gitignore
@@ -162,7 +173,7 @@ de encerrar — o grafo sempre termina, nunca entra em loop infinito.
   `build_graph()`, que retorna o grafo já compilado.
 
 O nó `gerar_analise` consome a API do provedor configurado em
-`LLM_PROVIDER` (Gemini 3 Flash por padrão) para gerar a resposta
+`LLM_PROVIDER` (Gemini 3.5 Flash por padrão) para gerar a resposta
 estruturada a partir do contexto recuperado da base local. Os testes
 automatizados (`tests/test_gerar_analise.py` e
 `tests/test_validacao_resposta.py`) usam mock do LLM — não gastam tokens
@@ -331,6 +342,37 @@ curl -X POST http://127.0.0.1:8000/api/analisar \
 ```
 
 *(mesma observação: alguns itens de cada bloco foram omitidos por brevidade.)*
+
+## Principais decisões tomadas
+
+- **Escopo fechado em 3 cenários** (cadastro de produtos, emissão de NF-e,
+  cálculo de IBS/CBS), em vez de tentar cobrir toda a Reforma Tributária —
+  prioriza demonstrar um fluxo de agente sólido em vez de abrangência de
+  conteúdo tributário (seção 1 do [docs/escopo.md](docs/escopo.md)).
+- **Identificação de cenário por palavras-chave (sem LLM)**: mais barato,
+  determinístico e fácil de testar; uma versão futura poderia usar o LLM
+  para desambiguar casos que não batem com nenhuma palavra-chave.
+- **Ferramenta de consulta 100% local e determinística**
+  (`app/tools/local_kb.py`), sem busca semântica/RAG — o cenário já vem
+  identificado antes da consulta, então uma busca por chave exata é
+  suficiente e evita depender de embeddings/vetores nesta entrega.
+- **Fábrica de LLM (`app/llm/factory.py`) como único ponto de acesso a
+  clients de provedor**: o restante do código (nós, grafo, API) programa
+  contra a interface genérica do LangChain e nunca importa
+  `ChatGoogleGenerativeAI`/`ChatAnthropic`/`ChatOpenAI` diretamente,
+  permitindo trocar de provedor só com variável de ambiente.
+- **Saída estruturada via `with_structured_output`** (Pydantic) em vez de
+  parsear texto livre do LLM — reduz a chance de resposta em formato
+  inesperado e permite validação objetiva dos 5 blocos.
+- **Retry limitado (`MAX_TENTATIVAS_GERACAO = 2`)** em vez de tentativas
+  ilimitadas: mantém o custo por pergunta previsível e garante que o
+  grafo sempre termina, mesmo se o LLM falhar persistentemente.
+- **Interface web em HTML/CSS/JS puro**, sem framework front-end: mantém a
+  entrega simples e focada no agente, já que o critério de avaliação pede
+  uma interface "amigável", não uma stack front-end sofisticada.
+- **Progresso simplificado** (spinner + texto) em vez de streaming via
+  Server-Sent Events: evita a complexidade de acompanhar granularmente
+  cada nó do grafo em tempo real, fora do escopo deste mini-projeto.
 
 ## Limitações da solução
 
