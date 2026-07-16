@@ -4,7 +4,9 @@ A identificação de cenário usa uma heurística simples por palavras-chave
 (sem LLM), e as respostas de erro/fora de escopo são montadas com texto
 fixo. O único nó que chama um LLM é `gerar_analise`, sempre através de
 `app.llm.factory.get_llm()` — nunca instanciando um client de provedor
-diretamente.
+diretamente. O nó `validar_resposta` confere se a saída de gerar_analise
+está completa, permitindo retry (até MAX_TENTATIVAS_GERACAO vezes) antes
+de `responder_erro_geracao` encerrar o fluxo com uma mensagem de fallback.
 """
 
 from __future__ import annotations
@@ -26,6 +28,23 @@ from app.tools.local_kb import (
 MENSAGEM_PERGUNTA_VAZIA = "Por favor, informe uma pergunta ou selecione um cenário."
 MENSAGEM_PERGUNTA_LONGA = "Sua pergunta é muito longa. Tente resumir em até 500 caracteres."
 LIMITE_CARACTERES_PERGUNTA = 500
+
+# Número máximo de vezes que gerar_analise pode ser executado para a mesma
+# pergunta antes do fluxo desistir e cair em responder_erro_geracao.
+MAX_TENTATIVAS_GERACAO = 2
+
+MENSAGEM_ERRO_GERACAO = (
+    "Não foi possível concluir a análise após múltiplas tentativas. Tente "
+    "novamente em instantes ou reformule sua pergunta."
+)
+
+CAMPOS_ANALISE_ESTRUTURADA = (
+    "cenario_analisado",
+    "pontos_reforma_relacionados",
+    "impactos_tecnicos_erp",
+    "pontos_atencao",
+    "checklist_tecnico",
+)
 
 # Heurística simples por palavras-chave (case-insensitive). Não usa LLM.
 # Uma versão futura poderia usar o LLM para desambiguar casos que não
@@ -151,11 +170,14 @@ def _invocar_llm_estruturado(mensagens: list) -> AnaliseEstruturada:
 def gerar_analise(state: AgentState) -> dict:
     """Gera a análise estruturada chamando o LLM configurado via get_llm().
 
-    Em caso de erro na chamada ao LLM, não deixa a exceção propagar:
-    adiciona uma mensagem amigável a `alertas` e mantém
-    `resposta_estruturada` como None — a validação final desse caso fica
-    para um prompt futuro.
+    Incrementa `tentativas_geracao` a cada execução, para permitir que o
+    nó validar_resposta decida se ainda cabe um retry (ver
+    MAX_TENTATIVAS_GERACAO). Em caso de erro na chamada ao LLM, não deixa
+    a exceção propagar: adiciona uma mensagem amigável a `alertas` e
+    mantém `resposta_estruturada` como None.
     """
+    tentativas_geracao = state.get("tentativas_geracao", 0) + 1
+
     contexto = json.dumps(state["dados_base_local"], indent=2, ensure_ascii=False)
     mensagens = [
         SystemMessage(content=SYSTEM_PROMPT_ANALISE),
@@ -169,12 +191,68 @@ def gerar_analise(state: AgentState) -> dict:
 
     try:
         resultado = _invocar_llm_estruturado(mensagens)
-        return {"resposta_estruturada": resultado.model_dump()}
+        return {
+            "resposta_estruturada": resultado.model_dump(),
+            "tentativas_geracao": tentativas_geracao,
+        }
     except GeracaoAnaliseError:
         return {
             "alertas": [
                 *state.get("alertas", []),
                 "Não foi possível gerar a análise no momento. "
                 "Tente novamente em instantes.",
-            ]
+            ],
+            "tentativas_geracao": tentativas_geracao,
         }
+
+
+def _resposta_e_valida(resposta: dict | None) -> bool:
+    """Verifica se a resposta estruturada tem os 5 blocos preenchidos.
+
+    Retorna True somente se `resposta` não for None e todos os campos de
+    CAMPOS_ANALISE_ESTRUTURADA estiverem presentes e não vazios (strings
+    não em branco, listas com pelo menos 1 item).
+    """
+    if resposta is None:
+        return False
+
+    for campo in CAMPOS_ANALISE_ESTRUTURADA:
+        valor = resposta.get(campo)
+        if valor is None:
+            return False
+        if isinstance(valor, str) and not valor.strip():
+            return False
+        if isinstance(valor, list) and len(valor) == 0:
+            return False
+
+    return True
+
+
+def validar_resposta(state: AgentState) -> dict:
+    """Verifica se a resposta gerada por gerar_analise está completa.
+
+    Não altera o estado quando a resposta é válida — este nó existe para
+    alimentar a decisão de roteamento do grafo (retry vs. fim vs.
+    fallback), feita em app/agent/graph.py.
+    """
+    if _resposta_e_valida(state.get("resposta_estruturada")):
+        return {}
+
+    return {
+        "alertas": [
+            *state.get("alertas", []),
+            "A resposta gerada pelo LLM veio incompleta ou em formato "
+            "inesperado.",
+        ]
+    }
+
+
+def responder_erro_geracao(state: AgentState) -> dict:
+    """Monta uma resposta de fallback após esgotar as tentativas de geração.
+
+    Preserva os alertas já acumulados, para fins de diagnóstico.
+    """
+    return {
+        "resposta_estruturada": {"mensagem": MENSAGEM_ERRO_GERACAO},
+        "alertas": state.get("alertas", []),
+    }
