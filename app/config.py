@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     llm_provider: ProviderName = "gemini"
 
     google_api_key: Optional[str] = None
-    gemini_model: str = "gemini-3-flash"
+    gemini_model: str = "gemini-3.5-flash"
 
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-sonnet-5"
