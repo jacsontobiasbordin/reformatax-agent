@@ -1370,3 +1370,194 @@ interface web → grafo do agente → resposta estruturada exibida em tela. O
 próximo prompt (10) foca em testes finais, exemplos de entrada/saída no
 README e revisão do checklist de entrega.
 ```
+
+## Prompt 10 — 2026-07-16
+
+**Resultado:** Branch `chore/revisao-final-entrega` criada a partir de
+`develop`. Cobertura de testes formalizada em `pytest.ini`
+(`--cov=app --cov-report=term-missing` nos `addopts`, além do marker
+`integration` e `-m "not integration"` já existentes desde o Prompt 07);
+corrigido `tests/test_agent_graph.py`, que nunca mockava `get_llm()` e
+passou a fazer chamadas reais ao Gemini assim que uma API key válida
+existiu no `.env` local — adicionada uma fixture `autouse` que mocka
+`get_llm`, garantindo que a suíte padrão nunca dependa de nenhuma API key
+(suíte completa caiu de ~45s para ~5s). `requirements.txt` com as versões
+fixadas via `pip freeze` (incluindo `pytest`/`pytest-cov`). Corrigido um
+bug encontrado em teste manual: o modelo padrão do projeto
+(`gemini-3-flash`) nunca existiu na API do Gemini (confirmado via
+`ListModels`, retornava 404) — atualizado para `gemini-3.5-flash` em
+`.env.example`, `app/config.py` e no README. README atualizado com
+exemplos reais de entrada/saída (um por cenário, obtidos manualmente via
+chamada real ao LLM, nunca em teste automatizado), seção "Limitações da
+solução", seção "Principais decisões tomadas" (exigida pelo checklist
+oficial e que ainda não existia), e revisão de trechos desatualizados
+(Status, descrição do problema, estrutura de pastas, menções residuais ao
+nome de modelo antigo). Placeholder `docs/apresentacao/.gitkeep` removido
+— `reformatax_apresentacao.pptx` (2 slides, confirmado via inspeção do
+zip do `.pptx`) já ocupa o lugar dele. Checklist oficial de entrega
+conferido: nenhuma chave/token versionado em nenhum commit do histórico,
+`.gitignore` cobre `.env`/`__pycache__`/ambientes virtuais/relatórios de
+cobertura, `.env.example` atualizado com as variáveis reais de multi-LLM,
+e o README contém todas as seções exigidas. Fora desta branch, também foi
+aberta separadamente a branch `fix/spinner-e-botoes-invisiveis` (a partir
+de `develop`), corrigindo dois bugs de UI encontrados em teste manual da
+interface web do Prompt 09 (spinner de progresso sempre visível por causa
+de `display` fixo sobrescrevendo o atributo `hidden`; texto invisível nos
+botões "Copiar resposta"/"Baixar relatório" no modo escuro do sistema).
+Todos os 30 testes da suíte padrão passam em ~5s, sem nenhuma API key
+configurada.
+
+**Prompt integral:**
+
+```
+Vamos fechar o mini-projeto: revisar a cobertura de testes, fixar as
+dependências, documentar exemplos reais de entrada/saída, conferir o
+checklist oficial de entrega e preparar a branch main para a submissão
+final. Esta etapa NÃO deve alterar a lógica do agente, dos nós ou da API —
+é uma etapa de consolidação e documentação sobre o que já foi implementado
+nos Prompts 01 a 09.
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b chore/revisao-final-entrega
+
+Execute as etapas abaixo, nesta ordem:
+
+1. FORMALIZAR CONFIGURAÇÃO DO PYTEST (pyproject.toml ou pytest.ini)
+   - Registre o marker "integration" (do teste opcional criado no
+     Prompt 07) para não gerar warning.
+   - Configure `addopts = -m "not integration"` como padrão, para que
+     `pytest` (sem argumentos) NUNCA tente chamar uma API real.
+   - Se estiver usando pytest-cov, adicione `--cov=app --cov-report=term-missing`
+     aos addopts (opcional) e adicione `pytest-cov` ao requirements.txt.
+   - Rode `pytest tests/ -v` e confirme que:
+     - Todos os testes dos Prompts 05 a 09 continuam passando juntos, sem
+       conflito entre eles (ex.: cache do `get_graph()`/`get_settings()`
+       vazando estado de um teste para outro — se isso acontecer, ajuste
+       os testes para resetar caches entre execuções, ex.: com
+       `get_settings.cache_clear()` em um fixture);
+     - Nenhum teste depende de GOOGLE_API_KEY (ou de qualquer outra chave)
+       estar configurada no ambiente.
+
+2. FIXAR AS VERSÕES DO requirements.txt
+   - Em um ambiente virtual limpo, rode `pip install -r requirements.txt`.
+   - Gere as versões efetivamente instaladas (`pip freeze`) e atualize o
+     requirements.txt fixando a versão exata de cada dependência direta
+     já listada (langgraph, langchain, langchain-core,
+     langchain-google-genai, langchain-anthropic, langchain-openai,
+     python-dotenv, pydantic, pydantic-settings, fastapi, uvicorn,
+     pytest, pytest-cov), no formato `pacote==versão`.
+   - Substitua o comentário antigo ("fixar versões após o primeiro teste")
+     por um comentário indicando a data em que as versões foram fixadas.
+
+3. ADICIONAR EXEMPLOS REAIS DE ENTRADA E SAÍDA NO README
+   Esta é a única etapa de todo o roadmap em que uma chamada REAL ao LLM é
+   necessária — feita manualmente por você, uma única vez por cenário,
+   nunca dentro de um teste automatizado:
+   - Configure um `.env` local com uma GOOGLE_API_KEY válida (não
+     versionado).
+   - Rode a interface web localmente (ou chame `POST /api/analisar`
+     diretamente via curl/httpie) com uma pergunta real para cada um dos 3
+     cenários.
+   - Copie as respostas reais obtidas e adicione ao README.md, na seção
+     "Exemplos de entrada e saída", um exemplo por cenário, no formato:
+     pergunta enviada → JSON (ou resumo estruturado) da resposta recebida.
+   - Adicione também um exemplo de requisição via curl, por exemplo:
+     curl -X POST http://127.0.0.1:8000/api/analisar \
+       -H "Content-Type: application/json" \
+       -d '{"pergunta": "Quais impactos no cadastro de produtos do ERP?"}'
+   - Não deixe nenhuma chave de API nesses exemplos.
+
+4. ADICIONAR SEÇÃO "LIMITAÇÕES DA SOLUÇÃO" NO README
+   Com base na seção "fora do escopo" do docs/escopo.md, resuma no
+   README as limitações desta primeira versão, por exemplo:
+   - Suporta apenas 3 cenários (cadastro de produtos, emissão de NF-e,
+     cálculo de IBS/CBS);
+   - Sem busca semântica/RAG — a base local é consultada por chave exata
+     de cenário;
+   - Identificação de cenário por palavras-chave simples, não por LLM;
+   - Sem histórico persistente de consultas nem login de usuários;
+   - Progresso da análise exibido de forma simplificada (sem streaming
+     passo a passo);
+   - Máximo de 2 tentativas de geração antes de retornar erro amigável;
+   - Não substitui parecer jurídico, fiscal ou contábil.
+
+5. REVISAR docs/prompts.md
+   Confirme que os 10 prompts (deste roadmap, do 01 ao 10) estão
+   registrados em ordem, cada um com pelo menos: número, título curto,
+   branch usada e data (ou apenas a ordem, se preferir não usar datas).
+   Se algum prompt executado anteriormente não foi registrado, adicione-o
+   agora.
+
+6. ORGANIZAR ARTEFATOS DE APRESENTAÇÃO
+   - Confirme que a apresentação em slides (arquivo .pptx com até 2
+     slides) está dentro de docs/apresentacao/, substituindo o
+     placeholder .gitkeep criado no Prompt 01.
+   - Se a imagem do mockup da tela (reformatax_tela_interacao.png) ainda
+     não estiver no repositório, adicione-a em docs/ (ex.:
+     docs/tela-interacao.png) e referencie-a na seção de interface web do
+     README.
+
+7. CONFERIR O CHECKLIST OFICIAL DE ENTREGA
+   Percorra item a item o checklist final do documento do mini-projeto
+   (repositório e organização; agente e implementação; ferramentas,
+   contexto e validação; README.md e prompts; apresentação; submissão) e
+   corrija qualquer item pendente. Em especial, confirme:
+   - Nenhuma chave, token ou informação sensível está versionada;
+   - .gitignore continua cobrindo .env, __pycache__, ambientes virtuais;
+   - .env.example está atualizado com todas as variáveis realmente usadas
+     pelo projeto (incluindo as de multi-LLM do Prompt 04);
+   - README.md contém: nome do projeto, descrição do problema, objetivo do
+     agente, explicação do fluxo com LangGraph, ferramenta utilizada,
+     instruções para executar o projeto, exemplo de entrada, exemplo de
+     saída, principais decisões tomadas e limitações da solução.
+
+8. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. test: adiciona configuração de cobertura e marcadores do pytest
+   2. build: fixa versões das dependências no requirements.txt
+   3. docs: adiciona exemplos reais de entrada e saída no README
+   4. docs: adiciona seção de limitações da solução no README
+   5. chore: organiza apresentação e mockup dentro de docs/
+   6. docs: revisa docs/prompts.md com o histórico completo de prompts
+
+9. ENVIAR A BRANCH E ABRIR O PULL REQUEST PARA DEVELOP
+   git push -u origin chore/revisao-final-entrega
+
+   Abra o PR direcionado para develop:
+     Título: "chore: revisão final e preparação para entrega"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Checklist), marcando explicitamente no checklist do PR os itens do
+     checklist oficial do mini-projeto conferidos no passo 7.
+
+10. RELEASE FINAL: PR DE develop PARA main
+    Só execute este passo depois que este PR (e todos os anteriores) já
+    estiverem revisados e mesclados em develop:
+      git checkout develop
+      git pull origin develop
+      git checkout main
+      git pull origin main
+    Abra o PR final:
+      gh pr create --base main --head develop \
+        --title "release: v1.0.0 — entrega do mini-projeto ReformaTax Agent" \
+        --body "Versão final do mini-projeto avaliativo, consolidando os
+    10 prompts registrados em docs/prompts.md: estrutura inicial,
+    configuração multi-LLM (Gemini 3 Flash como padrão), ferramenta de
+    consulta à base local, grafo LangGraph completo com validação/retry, e
+    interface web."
+    Se preferir, após o merge, crie uma tag `v1.0.0` na branch main para
+    marcar a entrega.
+
+11. VALIDAÇÃO FINAL
+    Mostre a saída de `pytest tests/ -v`, `git log --oneline --graph
+    --all` e `git status`, confirmando que:
+    - Todos os testes passam, sem nenhuma API key configurada;
+    - O link do repositório está acessível e a branch main reflete a
+      versão final, caso o passo 10 já tenha sido concluído;
+    - Nada sensível foi versionado em nenhum momento do histórico.
+
+Este é o último prompt do roadmap principal. Qualquer melhoria adicional
+(RAG, busca semântica, histórico de consultas, novos cenários,
+integrações externas) fica para uma evolução futura fora deste
+mini-projeto, conforme já registrado na seção 15 do escopo.
+```
