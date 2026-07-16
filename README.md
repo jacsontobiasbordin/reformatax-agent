@@ -332,8 +332,31 @@ curl -X POST http://127.0.0.1:8000/api/analisar \
 
 *(mesma observação: alguns itens de cada bloco foram omitidos por brevidade.)*
 
+## Limitações da solução
+
+Esta primeira versão (mini-projeto) tem escopo intencionalmente restrito
+(seção 5 do [docs/escopo.md](docs/escopo.md)):
+
+- Suporta apenas 3 cenários (cadastro de produtos, emissão de NF-e,
+  cálculo de IBS/CBS) — qualquer outro tema é tratado como fora de escopo.
+- Sem busca semântica/RAG: a base local (`data/reforma_tributaria_erp.json`)
+  é consultada por chave exata do cenário identificado, não por similaridade.
+- Identificação de cenário por palavras-chave simples (sem LLM) — perguntas
+  ambíguas ou que não usem nenhum dos termos mapeados caem em
+  "fora de escopo" mesmo quando o tema é pertinente.
+- Sem histórico persistente de consultas nem login de usuários; o estado
+  existe apenas durante a execução de uma única pergunta.
+- Progresso da análise exibido de forma simplificada (spinner/texto), sem
+  streaming passo a passo de cada nó do grafo.
+- Máximo de `MAX_TENTATIVAS_GERACAO` (2) tentativas de geração antes de
+  retornar uma mensagem de erro amigável.
+- Não substitui parecer jurídico, fiscal ou contábil definitivo — é um
+  apoio técnico inicial para equipes de desenvolvimento/análise de
+  sistemas.
+
 ## Próximos passos
 
-- Revisão do checklist de entrega do mini-projeto.
-
-Essa etapa será realizada em um prompt futuro.
+Conforme a seção 15 do [docs/escopo.md](docs/escopo.md), possíveis
+evoluções fora do escopo deste mini-projeto: base de conhecimento maior,
+busca semântica/RAG, histórico persistente de consultas, novos cenários
+fiscais, integração com APIs externas e conexão com módulos reais de ERP.
