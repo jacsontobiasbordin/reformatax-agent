@@ -173,9 +173,52 @@ que chama o provedor de verdade e só roda manualmente com
 `pytest -m integration` (fica de fora da suíte padrão, configurada em
 `pytest.ini`).
 
+## Interface web (FastAPI)
+
+O agente é exposto através de uma API em FastAPI (`app/web/main.py`) e uma
+tela estática em HTML/CSS/JS puro (`app/web/static/`), sem nenhum
+framework front-end — apenas uma camada de apresentação sobre o grafo já
+implementado em `app/agent`.
+
+- `app/web/schemas.py` — `PerguntaRequest` (validação leve de tamanho do
+  payload) e `AnaliseResponse` (cenário identificado, resposta estruturada
+  e alertas).
+- `app/web/main.py` — `get_graph()` constrói o grafo uma única vez (cache
+  com `lru_cache`); `GET /api/cenarios` lista os cenários suportados (a
+  partir de `listar_cenarios_disponiveis()`, sem duplicar essa lista no
+  front-end); `POST /api/analisar` monta o estado inicial do grafo
+  (incluindo `tentativas_geracao: 0`), executa `.invoke()` e devolve o
+  resultado. Qualquer falha inesperada do `.invoke()` vira um HTTP 500
+  genérico, sem vazar stack trace ao navegador — o acesso ao LLM continua
+  acontecendo somente no backend, via `app.llm.factory.get_llm()`.
+- `app/web/static/index.html`, `style.css`, `app.js` — cabeçalho com nome
+  e descrição do projeto, campo de pergunta, botões rápidos por cenário
+  (preenchem a textarea com uma pergunta de exemplo — o backend continua
+  identificando o cenário a partir do texto), botão "Analisar impacto",
+  indicador de progresso e os 5 cards do resultado, com ações de "Copiar
+  resposta" e "Baixar relatório" (arquivo `.txt`, via `Blob`, sem
+  dependências externas nem geração de PDF).
+
+### Como executar a interface web
+
+```bash
+uvicorn app.web.main:app --reload
+```
+
+Acesse `http://127.0.0.1:8000` no navegador.
+
+A indicação de progresso desta versão é simplificada (um texto
+"Analisando..." com spinner enquanto a requisição está em andamento) —
+não há acompanhamento granular de cada nó do grafo em tempo real (isso
+exigiria Server-Sent Events/streaming, fora do escopo deste mini-projeto,
+mas é uma evolução possível). A tela segue a estrutura definida na seção
+12 do escopo do projeto ([docs/escopo.md](docs/escopo.md)): campo de
+pergunta, botões rápidos para os três cenários, botão de análise,
+progresso e resultado em cards com ação de copiar/baixar.
+
 ## Próximos passos
 
-- Implementação da interface web (`app/web`), consumindo `build_graph()`.
-- Ampliação dos testes automatizados (`tests`).
+- Testes finais, exemplos reais de entrada/saída no README e revisão do
+  checklist de entrega do mini-projeto.
 
-Essas etapas serão realizadas em prompts futuros.
+Essa etapa será realizada em um prompt futuro.

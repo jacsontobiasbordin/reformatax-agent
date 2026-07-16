@@ -1175,3 +1175,198 @@ ponta (entrada → validação → identificação → consulta → geração �
 validação final). O próximo prompt (09) implementa a interface web que
 consome esse grafo.
 ```
+
+## Prompt 9 — 2026-07-16
+
+**Resultado:** Branch `feature/interface-web` criada a partir de
+`develop`; `app/web/schemas.py` com `PerguntaRequest` e `AnaliseResponse`;
+`app/web/main.py` com `get_graph()` (cacheado via `lru_cache`), `GET
+/api/cenarios` (usando `listar_cenarios_disponiveis()`) e `POST
+/api/analisar` (monta o estado inicial do grafo, incluindo
+`tentativas_geracao: 0`, chama `.invoke()` e retorna `AnaliseResponse`;
+exceções inesperadas viram HTTP 500 genérico, sem vazar stack trace),
+montando os arquivos estáticos por último; `app/web/static/index.html`,
+`style.css` e `app.js` implementando a tela sem nenhum framework
+front-end (cabeçalho, campo de pergunta, botões rápidos por cenário,
+botão "Analisar impacto", indicador de progresso simples, os 5 cards do
+resultado e as ações "Copiar resposta"/"Baixar relatório", via
+`navigator.clipboard` e `Blob`); `tests/test_web.py` criado com
+`TestClient` e mock de `get_llm`, cobrindo `GET /`, `GET /api/cenarios`,
+pergunta válida, pergunta vazia (validação leve do schema e validação do
+grafo) e pergunta fora de escopo (6 testes); README atualizado com a
+seção "Interface web (FastAPI)" e o comando `uvicorn app.web.main:app
+--reload`. Todos os 30 testes da suíte padrão passam sem nenhuma API key
+configurada. Com este prompt, o mini-projeto fica funcionalmente completo:
+entrada pela interface web → grafo do agente → resposta estruturada
+exibida em tela.
+
+**Prompt integral:**
+
+```
+Vamos implementar a interface web do ReformaTax Agent: uma API em FastAPI
+que expõe o grafo já implementado (build_graph, do Prompt 08) e uma tela
+estática (HTML/CSS/JS puro, sem framework front-end) que segue o layout do
+mockup já aprovado: nome do projeto, descrição, campo de pergunta, botões
+rápidos para os 3 cenários, botão "Analisar impacto", indicação de
+progresso, resultado em cards e ações de copiar/baixar.
+
+NÃO altere a lógica do grafo, dos nós ou do LLM nesta etapa — a interface
+web é apenas uma camada de apresentação sobre o que já existe. NÃO
+implemente streaming de progresso passo a passo do grafo (isso exigiria
+Server-Sent Events e acompanhamento granular de cada nó, o que está fora do
+escopo do mini-projeto); a indicação de progresso pode ser um indicador
+simples de "carregando" enquanto a requisição está em andamento.
+
+Crie a branch a partir de develop:
+  git checkout develop
+  git pull origin develop
+  git checkout -b feature/interface-web
+
+Execute as etapas abaixo, nesta ordem:
+
+1. CRIAR OS SCHEMAS DA API (app/web/schemas.py)
+   - `PerguntaRequest` (pydantic): campo `pergunta: str`, com validação de
+     tamanho mínimo/máximo compatível com a já existente em
+     validar_entrada (não duplique a regra de negócio, apenas evite
+     payloads absurdos, ex.: `max_length=1000`).
+   - `AnaliseResponse` (pydantic): campos `cenario_identificado: str |
+     None`, `resposta_estruturada: dict | None`, `alertas: list[str]`.
+
+2. IMPLEMENTAR A API (app/web/main.py)
+   - Crie a instância do FastAPI.
+   - Implemente uma função `get_graph()` com `functools.lru_cache` que
+     chama `build_graph()` uma única vez (evita reconstruir o grafo a cada
+     requisição).
+   - Rota `GET /api/cenarios`: retorna a lista de cenários suportados,
+     usando `listar_cenarios_disponiveis()` de `app.tools.local_kb`
+     (evita duplicar essa lista no front-end).
+   - Rota `POST /api/analisar`: recebe `PerguntaRequest`, monta o estado
+     inicial do grafo:
+       {
+         "pergunta_usuario": payload.pergunta,
+         "cenario_identificado": None,
+         "dados_base_local": None,
+         "resposta_estruturada": None,
+         "alertas": [],
+         "tentativas_geracao": 0,
+       }
+     chama `get_graph().invoke(estado_inicial)` e retorna um
+     `AnaliseResponse` com os campos relevantes do estado final.
+   - Trate exceções inesperadas do `.invoke()` (que não deveriam
+     acontecer, já que os nós tratam seus próprios erros — mas proteja
+     mesmo assim) retornando HTTP 500 com uma mensagem genérica amigável,
+     sem vazar stack trace para o cliente.
+   - Monte os arquivos estáticos da etapa 3 com
+     `app.mount("/", StaticFiles(directory="app/web/static", html=True),
+     name="static")`, registrado por último (depois das rotas /api/*).
+
+3. CRIAR A INTERFACE ESTÁTICA (app/web/static/)
+   Crie três arquivos — index.html, style.css, app.js — implementando a
+   tela conforme o mockup já validado:
+   - index.html:
+     - Cabeçalho com nome do projeto e descrição curta;
+     - Textarea para a pergunta do usuário;
+     - Três botões rápidos (um por cenário). Ao clicar em um botão rápido,
+       preencha a textarea com uma pergunta de exemplo representativa
+       daquele cenário (não crie um campo separado de "cenário forçado" —
+       o backend continua identificando o cenário a partir do texto da
+       pergunta, como já implementado no Prompt 06);
+     - Botão "Analisar impacto";
+     - Uma área de status/progresso simples (ex.: texto "Analisando..."
+       com um spinner ou barra indeterminada), visível apenas enquanto a
+       requisição está em andamento;
+     - Área de resultado, inicialmente vazia, com os 5 cards (mesmos
+       títulos usados no schema: Cenário analisado, Pontos da reforma
+       relacionados, Impactos técnicos no ERP, Pontos de atenção,
+       Checklist técnico);
+     - Botões "Copiar resposta" e "Baixar relatório", habilitados somente
+       depois que houver um resultado.
+   - style.css: estilos simples e limpos, coerentes com uma "ferramenta
+     interna de apoio técnico" (não precisa reproduzir pixel a pixel o
+     mockup, mas deve manter a mesma estrutura de elementos e hierarquia
+     visual).
+   - app.js, sem nenhum framework, implementando:
+     - Ao carregar a página, buscar `GET /api/cenarios` (opcional, só se
+       quiser popular dinamicamente os textos/labels dos botões);
+     - Ao clicar em "Analisar impacto": desabilitar o botão, mostrar a
+       área de progresso, chamar `POST /api/analisar` com
+       `{ "pergunta": <valor da textarea> }`;
+     - Ao receber a resposta:
+       - Se `alertas` não estiver vazio e `resposta_estruturada` for nulo
+         ou parcial, exibir os alertas como mensagem amigável (não como
+         cards);
+       - Se `resposta_estruturada` vier completo, preencher os 5 cards
+         (listas devem ser renderizadas como `<ul><li>`, não como texto
+         corrido);
+       - Esconder a área de progresso e reabilitar o botão em qualquer
+         caso (sucesso ou erro).
+     - Botão "Copiar resposta": monta uma versão em texto plano de todos
+       os blocos e usa `navigator.clipboard.writeText`;
+     - Botão "Baixar relatório": monta o mesmo texto plano e dispara o
+       download de um arquivo `.txt` (ou `.md`) usando `Blob` + link
+       temporário — sem depender de nenhuma biblioteca externa nem gerar
+       PDF nesta versão.
+
+4. ATUALIZAR O requirements.txt (se necessário)
+   Confirme que `fastapi` e `uvicorn` já estão presentes (adicionados no
+   Prompt 01/03); não é necessário adicionar Jinja2 ou outro motor de
+   templates, já que o front-end é servido como arquivos estáticos.
+
+5. ATUALIZAR O README.md
+   - Adicione uma seção "Como executar a interface web", com o comando
+     `uvicorn app.web.main:app --reload` e a URL local
+     (`http://127.0.0.1:8000`);
+   - Deixe claro que a indicação de progresso é simplificada (spinner/
+     texto), sem acompanhamento granular de cada nó do grafo nesta versão
+     — cite isso como uma possível evolução futura;
+   - Adicione uma captura de tela (pode referenciar o arquivo
+     `reformatax_tela_interacao.png` já existente) ou descreva brevemente
+     a tela.
+
+6. TESTES (tests/test_web.py)
+   Usando `fastapi.testclient.TestClient` e o mesmo padrão de mock do LLM
+   usado nos Prompts 07/08 (nunca chamando API real):
+   - `GET /` retorna 200 e contém o nome do projeto no HTML;
+   - `GET /api/cenarios` retorna os 3 cenários esperados;
+   - `POST /api/analisar` com uma pergunta válida (mock do LLM retornando
+     uma AnaliseEstruturada de exemplo) retorna 200 com
+     `resposta_estruturada` completo;
+   - `POST /api/analisar` com pergunta vazia retorna `alertas` preenchido
+     e `resposta_estruturada` nulo ou com mensagem de validação;
+   - `POST /api/analisar` com uma pergunta fora de escopo retorna o
+     comportamento esperado do nó responder_fora_de_escopo.
+   Rode `pytest tests/ -v` e confirme que todos os testes passam sem
+   nenhuma API key configurada.
+
+7. COMMITS SEMÂNTICOS (um por etapa concluída)
+   1. feat: adiciona API FastAPI que expõe o grafo do agente
+   2. feat: adiciona interface web estática (HTML/CSS/JS)
+   3. feat: implementa ações de copiar resposta e baixar relatório
+   4. test: adiciona testes da API web com mock do LLM
+   5. docs: documenta como executar a interface web no README
+
+8. ENVIAR A BRANCH E ABRIR O PULL REQUEST
+   git push -u origin feature/interface-web
+
+   Abra o PR direcionado para develop:
+     Título: "feat: interface web (FastAPI) consumindo o grafo do agente"
+     Corpo no mesmo padrão dos PRs anteriores (Contexto / O que foi feito /
+     Fora do escopo / Checklist), destacando em "Fora do escopo":
+       - Progresso passo a passo em tempo real (SSE/streaming) do grafo
+       - Geração de relatório em PDF (o download é em texto simples/.md)
+       - Autenticação/login de usuários
+
+9. VALIDAÇÃO FINAL
+   Mostre a saída de `pytest tests/ -v` (sem GOOGLE_API_KEY configurada),
+   `git log --oneline --graph` e `git status`, confirmando que:
+   - Todos os testes passam;
+   - Nenhuma chave de API é exposta no HTML/JS servido ao navegador (o
+     acesso ao LLM continua acontecendo apenas no backend, via
+     app.llm.factory.get_llm());
+   - Os commits seguem o padrão semântico do projeto.
+
+Com este prompt, o mini-projeto fica funcionalmente completo: entrada pela
+interface web → grafo do agente → resposta estruturada exibida em tela. O
+próximo prompt (10) foca em testes finais, exemplos de entrada/saída no
+README e revisão do checklist de entrega.
+```
