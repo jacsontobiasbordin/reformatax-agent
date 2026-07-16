@@ -27,3 +27,7 @@ dist/
 
 # Logs
 *.log
+
+# Relatórios de cobertura de testes (pytest-cov)
+.coverage
+htmlcov/

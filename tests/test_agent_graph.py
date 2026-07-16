@@ -1,6 +1,19 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from app.agent.graph import build_graph
+
+
+@pytest.fixture(autouse=True)
+def _mock_get_llm():
+    """Estes testes cobrem validação/identificação/consulta local, não a
+    geração via LLM — nunca devem depender de uma API key real nem gastar
+    tokens, mesmo que uma esteja configurada no `.env` local."""
+    llm = MagicMock()
+    llm.with_structured_output.side_effect = RuntimeError("LLM mockado neste teste")
+    with patch("app.agent.nodes.get_llm", return_value=llm):
+        yield
 
 
 def _estado_inicial(pergunta: str) -> dict:
