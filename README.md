@@ -216,9 +216,124 @@ mas é uma evolução possível). A tela segue a estrutura definida na seção
 pergunta, botões rápidos para os três cenários, botão de análise,
 progresso e resultado em cards com ação de copiar/baixar.
 
+## Exemplos de entrada e saída
+
+Os exemplos abaixo são respostas **reais** do agente (Gemini 3.5 Flash),
+obtidas manualmente uma vez por cenário — nunca dentro da suíte
+automatizada de testes, que sempre usa mock do LLM.
+
+### Exemplo de requisição via curl
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/analisar \
+  -H "Content-Type: application/json" \
+  -d '{"pergunta": "Quais impactos no cadastro de produtos do ERP com a Reforma Tributária?"}'
+```
+
+### 1. Cadastro de produtos
+
+**Pergunta:** "Quais impactos no cadastro de produtos do ERP com a Reforma Tributária?"
+
+```json
+{
+  "cenario_identificado": "cadastro_produtos",
+  "resposta_estruturada": {
+    "cenario_analisado": "Análise dos impactos no cadastro de produtos do ERP decorrentes da transição para a Reforma Tributária (IBS/CBS), com foco em parametrização tributária, revisão de NCMs, criação do campo cClassTrib e novas regras de exceção.",
+    "pontos_reforma_relacionados": [
+      "O NCM continua obrigatório e ganha função estratégica: passa a ajudar a identificar a incidência de IBS, CBS e Imposto Seletivo.",
+      "O cClassTrib substitui a lógica antiga de CST/CFOP e precisa ser atribuído a cada produto/serviço com base em análise contextual (NCM + natureza da operação + anexos da LC 214/2025), não apenas por 'de-para' automático.",
+      "Existem anexos da LC 214/2025 com reduções e isenções específicas (ex.: cesta básica com alíquota zero, dispositivos de acessibilidade, medicamentos, educação, transporte público, saúde)."
+    ],
+    "impactos_tecnicos_erp": [
+      "Necessidade de revisar e atualizar o campo NCM de todos os produtos cadastrados com base nas tabelas mais recentes.",
+      "Criação/adequação de campo(s) para armazenar o cClassTrib e o CST do IBS/CBS por produto (ou por combinação produto + operação).",
+      "Cadastro de regras de exceção por produto (redução de alíquota, isenção, alíquota zero) vinculadas aos anexos da LC 214/2025."
+    ],
+    "pontos_atencao": [
+      "Deve-se validar com a área fiscal/contábil quais produtos se enquadram em reduções, isenções ou alíquota zero antes de aplicar qualquer classificação em massa no sistema.",
+      "Este retorno tem caráter informativo de apoio tecnológico e não constitui parecer jurídico ou fiscal definitivo."
+    ],
+    "checklist_tecnico": [
+      "Revisar o NCM de todos os produtos cadastrados com base na tabela vigente.",
+      "Mapear e atribuir o cClassTrib e o CST do IBS/CBS a cada produto/operação.",
+      "Testar simulação de emissão de nota para os produtos mais representativos do catálogo em ambiente de homologação."
+    ]
+  }
+}
+```
+
+*(resposta completa tem 5-6 itens por bloco; alguns foram omitidos aqui por brevidade — a estrutura e o conteúdo são reais, sem edição de conteúdo.)*
+
+### 2. Emissão de nota fiscal
+
+**Pergunta:** "Preciso emitir uma NF-e, o que muda com a reforma tributária?"
+
+```json
+{
+  "cenario_identificado": "emissao_nota_fiscal",
+  "resposta_estruturada": {
+    "cenario_analisado": "Emissão de Notas Fiscais Eletrônicas (NF-e/NFC-e) no ERP e as mudanças estruturais e de leiaute exigidas pela Reforma Tributária (IBS, CBS e Imposto Seletivo).",
+    "pontos_reforma_relacionados": [
+      "Novas Notas Técnicas (a partir da RT 2024.002) alteram o leiaute da NF-e/NFC-e inserindo grupos e campos para IBS, CBS e Imposto Seletivo.",
+      "O CFOP perde parte de sua função estrutural, e a classificação passa a seguir tabelas nacionais do Comitê Gestor vinculadas ao cClassTrib.",
+      "Existe um grupo de totais específico na NF-e para consolidar IBS, CBS e Imposto Seletivo, e divergências entre itens e totais provocarão rejeição da nota."
+    ],
+    "impactos_tecnicos_erp": [
+      "Atualização do módulo emissor de NF-e/NFC-e para suportar os novos campos e grupos de IBS, CBS e IS no XML.",
+      "Ajuste na geração do documento fiscal para integrar o cClassTrib e o CST por item a partir dos dados do cadastro.",
+      "Implementação de validação interna pré-transmissão para garantir consistência entre os valores dos itens e o grupo de totais."
+    ],
+    "pontos_atencao": [
+      "Erros de cadastro e parametrização serão validados em tempo real pela Receita Federal (CBS) e Comitê Gestor (IBS), gerando rejeições imediatas do XML.",
+      "Este documento serve exclusivamente como orientação técnica para desenvolvimento e suporte de sistemas, não devendo ser considerado parecer jurídico, fiscal ou contábil definitivo."
+    ],
+    "checklist_tecnico": [
+      "Confirmar a atualização do emissor de acordo com a Nota Técnica mais recente de IBS/CBS/IS.",
+      "Garantir que os cálculos dos itens fecham perfeitamente com o grupo de totais do documento.",
+      "Executar testes completos de emissão para operações comuns (venda, devolução, transferência, remessa) em homologação."
+    ]
+  }
+}
+```
+
+*(mesma observação: alguns itens de cada bloco foram omitidos por brevidade.)*
+
+### 3. Cálculo de impostos (IBS/CBS)
+
+**Pergunta:** "Como o cálculo de impostos do ERP pode ser afetado pela CBS e IBS?"
+
+```json
+{
+  "cenario_identificado": "calculo_impostos",
+  "resposta_estruturada": {
+    "cenario_analisado": "Avaliação de como o cálculo de impostos do ERP é impactado pela introdução da CBS e do IBS, estruturados sob o modelo de IVA Dual.",
+    "pontos_reforma_relacionados": [
+      "A base de cálculo do IBS/CBS é o valor da operação, sendo calculados por fora (não integram sua própria base), nos termos do art. 12 da LC 214/2025.",
+      "Adoção do princípio da não cumulatividade plena, gerando direito a crédito ao adquirente desde que o bem ou serviço seja utilizado em atividade tributada.",
+      "Tributação baseada no princípio do destino, onde o imposto é consolidado no local de consumo e não na origem."
+    ],
+    "impactos_tecnicos_erp": [
+      "Revisão e adequação da engine de cálculo de impostos para aplicar o conceito de tributação por fora.",
+      "Implementação de rotinas de cálculo de créditos e débitos de IBS/CBS por operação com foco na não cumulatividade plena.",
+      "Preparação dos módulos financeiro e contábil do ERP para suportar o fluxo de conciliação e liquidação via split payment."
+    ],
+    "pontos_atencao": [
+      "Qualquer alteração estrutural no ERP, parametrização ou simulação de preços deve ser obrigatoriamente validada junto às áreas fiscal e contábil da empresa.",
+      "Este material serve exclusivamente como apoio técnico inicial ao desenvolvimento de sistemas e não deve ser interpretado como parecer legal, fiscal ou contábil definitivo."
+    ],
+    "checklist_tecnico": [
+      "Validar se a engine de cálculo do ERP está aplicando corretamente a regra de tributação por fora para o IBS e a CBS.",
+      "Testar a lógica de apropriação e geração de créditos e débitos por operação conforme o princípio da não cumulatividade.",
+      "Mapear o impacto do fluxo de split payment na conciliação bancária e financeira dos meios de pagamento suportados."
+    ]
+  }
+}
+```
+
+*(mesma observação: alguns itens de cada bloco foram omitidos por brevidade.)*
+
 ## Próximos passos
 
-- Testes finais, exemplos reais de entrada/saída no README e revisão do
-  checklist de entrega do mini-projeto.
+- Revisão do checklist de entrega do mini-projeto.
 
 Essa etapa será realizada em um prompt futuro.
