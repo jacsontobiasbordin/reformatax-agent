@@ -73,7 +73,7 @@ reformatax/
 4. Obtenha uma API key do Gemini no [Google AI Studio](https://aistudio.google.com/app/apikey)
    e preencha a variável `GOOGLE_API_KEY` no arquivo `.env` local (nunca no
    `.env.example`, que é versionado). A variável `GEMINI_MODEL` já vem
-   preenchida com o modelo padrão do projeto (`gemini-3-flash`).
+   preenchida com o modelo padrão do projeto (`gemini-3.5-flash`).
 
 ## Provedores de LLM suportados
 
@@ -96,7 +96,7 @@ key correspondente. Nenhum código do agente precisa ser alterado — todo
 acesso ao LLM passa pela fábrica em `app/llm/factory.py`.
 
 O provedor padrão e recomendado para este mini-projeto é `gemini`, com o
-modelo `gemini-3-flash`, pelo custo-benefício. Os demais provedores existem
+modelo `gemini-3.5-flash`, pelo custo-benefício. Os demais provedores existem
 para portabilidade entre ambientes, não como substituição da entrega.
 
 ## Ferramenta: consulta à base local
