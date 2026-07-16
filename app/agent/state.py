@@ -32,6 +32,13 @@ class AgentState(TypedDict):
         alertas: Lista de mensagens de validação/erro acumuladas ao longo
             do fluxo (ex.: pergunta vazia, pergunta muito longa, falha ao
             consultar a base local).
+        tentativas_geracao: Quantas vezes o nó gerar_analise já foi
+            executado para a pergunta atual. Controla o número de retries
+            permitidos antes do fluxo desistir e cair no nó de fallback
+            (ver MAX_TENTATIVAS_GERACAO em app/agent/nodes.py). Deve ser
+            iniciado em 0 ao montar o estado de entrada do grafo
+            (`.invoke({...})`); o código também trata a ausência dessa
+            chave como 0 na primeira execução.
     """
 
     pergunta_usuario: str
@@ -39,3 +46,4 @@ class AgentState(TypedDict):
     dados_base_local: Optional[dict]
     resposta_estruturada: Optional[dict]
     alertas: list[str]
+    tentativas_geracao: int

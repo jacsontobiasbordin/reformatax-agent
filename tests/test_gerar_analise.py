@@ -30,6 +30,7 @@ def _estado_inicial(pergunta: str) -> dict:
         "dados_base_local": None,
         "resposta_estruturada": None,
         "alertas": [],
+        "tentativas_geracao": 0,
     }
 
 
@@ -81,7 +82,10 @@ def test_gerar_analise_erro_no_llm_nao_propaga_excecao():
     assert "análise" in resultado["alertas"][-1].lower()
 
 
-def test_grafo_completo_erro_no_llm_mantem_resposta_estruturada_none():
+def test_grafo_completo_erro_no_llm_esgota_retries_e_cai_no_fallback():
+    """Com o laço de retry (Prompt 08), erro persistente no LLM não deixa
+    resposta_estruturada em None: após esgotar as tentativas, o grafo cai
+    em responder_erro_geracao, que preenche uma mensagem de fallback."""
     llm = MagicMock()
     llm.with_structured_output.side_effect = RuntimeError("timeout simulado")
 
@@ -91,5 +95,5 @@ def test_grafo_completo_erro_no_llm_mantem_resposta_estruturada_none():
             _estado_inicial("Como funciona o cadastro de produtos com NCM?")
         )
 
-    assert resultado["resposta_estruturada"] is None
+    assert resultado["resposta_estruturada"] is not None
     assert resultado["alertas"]
