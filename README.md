@@ -218,14 +218,18 @@ uvicorn app.web.main:app --reload
 
 Acesse `http://127.0.0.1:8000` no navegador.
 
-A indicação de progresso desta versão é simplificada (um texto
-"Analisando..." com spinner enquanto a requisição está em andamento) —
-não há acompanhamento granular de cada nó do grafo em tempo real (isso
-exigiria Server-Sent Events/streaming, fora do escopo deste mini-projeto,
-mas é uma evolução possível). A tela segue a estrutura definida na seção
-12 do escopo do projeto ([docs/escopo.md](docs/escopo.md)): campo de
-pergunta, botões rápidos para os três cenários, botão de análise,
-progresso e resultado em cards com ação de copiar/baixar.
+![Mockup da tela de interação do ReformaTax Agent](docs/reformatax_tela_interacao.png)
+
+A tela segue a estrutura definida no mockup acima e na seção 12 do escopo
+do projeto ([docs/escopo.md](docs/escopo.md)): campo de pergunta, botões
+rápidos para os três cenários, botão de análise, indicação de progresso e
+resultado em cards com ação de copiar/baixar. Uma diferença deliberada em
+relação ao mockup: ali o progresso é mostrado como uma trilha granular por
+etapa (Validar → Cenário → Base → Gerar); a versão implementada usa um
+indicador simplificado (texto "Analisando..." com spinner enquanto a
+requisição está em andamento), sem acompanhamento passo a passo de cada nó
+do grafo em tempo real — isso exigiria Server-Sent Events/streaming, fora
+do escopo deste mini-projeto, mas é uma evolução possível.
 
 ## Exemplos de entrada e saída
 
